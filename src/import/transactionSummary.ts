@@ -1,10 +1,10 @@
 import type { ImportedTransaction } from "./csvParser";
-import { SPEND_CATEGORIES, type SpendCategory } from "./categories";
+import { isReservedCategory } from "./categories";
 
 export type ChartRange = "day" | "month" | "year";
 
 export type ChartSegment = {
-  category: SpendCategory;
+  category: string;
   value: number;
 };
 
@@ -14,7 +14,7 @@ export type ChartPoint = {
   segments: ChartSegment[];
 };
 
-function parseDate(dateString: string): Date | null {
+export function parseDate(dateString: string): Date | null {
   const [month, day, year] = dateString.split("/").map((part) => Number.parseInt(part, 10));
   if ([month, day, year].some((value) => Number.isNaN(value))) {
     return null;
@@ -41,11 +41,15 @@ export function resolveBucketKey(dateString: string, range: ChartRange): string 
   return parsedDate ? bucketKeyForDate(parsedDate, range) : null;
 }
 
-export function buildChartSeries(transactions: ImportedTransaction[], range: ChartRange): ChartPoint[] {
-  const buckets = new Map<string, Map<SpendCategory, number>>();
+export function buildChartSeries(
+  transactions: ImportedTransaction[],
+  range: ChartRange,
+  categoryOrder: string[],
+): ChartPoint[] {
+  const buckets = new Map<string, Map<string, number>>();
 
   transactions.forEach((transaction) => {
-    if (transaction.category === "transfers" || transaction.category === "unclassified") {
+    if (isReservedCategory(transaction.category)) {
       return;
     }
 
@@ -55,7 +59,7 @@ export function buildChartSeries(transactions: ImportedTransaction[], range: Cha
     }
 
     const bucketKey = bucketKeyForDate(parsedDate, range);
-    const bucket = buckets.get(bucketKey) ?? new Map<SpendCategory, number>();
+    const bucket = buckets.get(bucketKey) ?? new Map<string, number>();
     bucket.set(transaction.category, (bucket.get(transaction.category) ?? 0) + transaction.amount);
     buckets.set(bucketKey, bucket);
   });
@@ -74,7 +78,7 @@ export function buildChartSeries(transactions: ImportedTransaction[], range: Cha
       label = `${month}/${day}/${year}`;
     }
 
-    const segments = SPEND_CATEGORIES.filter((category) => categoryTotals.has(category)).map((category) => ({
+    const segments = categoryOrder.filter((category) => categoryTotals.has(category)).map((category) => ({
       category,
       value: Number((categoryTotals.get(category) ?? 0).toFixed(2)),
     }));

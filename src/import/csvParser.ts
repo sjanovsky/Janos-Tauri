@@ -12,7 +12,7 @@ export type ImportedTransaction = {
   category: Category;
 };
 
-function splitCsvLine(line: string): string[] {
+export function splitDelimitedLine(line: string, delimiter: string): string[] {
   const values: string[] = [];
   let current = "";
   let insideQuotes = false;
@@ -30,7 +30,7 @@ function splitCsvLine(line: string): string[] {
       continue;
     }
 
-    if (char === "," && !insideQuotes) {
+    if (char === delimiter && !insideQuotes) {
       values.push(current);
       current = "";
       continue;
@@ -53,11 +53,11 @@ export function parseCsvText(csvText: string, bankName: string, fileName: string
     return [];
   }
 
-  const headers = splitCsvLine(rows[0]).map((header) => header.trim());
+  const headers = splitDelimitedLine(rows[0], ",").map((header) => header.trim());
   const transactions: ImportedTransaction[] = [];
 
   for (let index = 1; index < rows.length; index += 1) {
-    const values = splitCsvLine(rows[index]);
+    const values = splitDelimitedLine(rows[index], ",");
     const record: Record<string, string> = {};
 
     headers.forEach((header, headerIndex) => {

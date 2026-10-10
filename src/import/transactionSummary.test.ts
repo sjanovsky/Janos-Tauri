@@ -25,7 +25,7 @@ describe("buildChartSeries", () => {
       makeTransaction({ id: "3", date: "08/01/2026", description: "Groceries", amount: 24.0, category: "groceries" }),
     ];
 
-    const series = buildChartSeries(transactions, "month");
+    const series = buildChartSeries(transactions, "month", ["restaurants", "groceries"]);
 
     expect(series).toEqual([
       { key: "2026-07", label: "07/2026", segments: [{ category: "restaurants", value: 17.96 }] },
@@ -39,7 +39,7 @@ describe("buildChartSeries", () => {
       makeTransaction({ id: "2", date: "07/04/2026", amount: 500, category: "transfers" }),
     ];
 
-    const series = buildChartSeries(transactions, "month");
+    const series = buildChartSeries(transactions, "month", ["restaurants"]);
 
     expect(series).toEqual([
       { key: "2026-07", label: "07/2026", segments: [{ category: "restaurants", value: 12.96 }] },
