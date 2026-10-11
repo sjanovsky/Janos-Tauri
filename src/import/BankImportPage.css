@@ -1030,23 +1030,40 @@
 }
 
 /* Hover tints the cell with its bucket color (inherited via --bucket from the parent row),
-   matching the category/bucket label hovers so both halves of a row highlight alike. */
+   matching the category/bucket label hovers so both halves of a row highlight alike.
+   Columns are spaced by the row's `gap` (0.3rem), so the cell background stops short of the
+   divider on its right — that divider is the next cell's border-left, and the gap between
+   leaves an unpainted sliver. The box-shadow paints exactly that 0.3rem gap in the same color
+   so the highlight runs flush to the divider. (--totals-cell-hover lets the --bucket variant
+   restyle the fill and its matching shadow in one place.) */
 .import-shell__totals-cell:hover {
-  background: color-mix(in srgb, var(--bucket, #d1d5db) 16%, white);
+  --totals-cell-hover: color-mix(in srgb, var(--bucket, #d1d5db) 16%, white);
+  background: var(--totals-cell-hover);
+  box-shadow: 0.3rem 0 0 0 var(--totals-cell-hover);
 }
 
 .import-shell__totals-cell--bucket:hover {
-  background: color-mix(in srgb, var(--bucket, #d1d5db) 24%, white);
+  --totals-cell-hover: color-mix(in srgb, var(--bucket, #d1d5db) 24%, white);
 }
 
 .import-shell__totals-cell--column {
   background: rgba(79, 70, 229, 0.1);
+  box-shadow: 0.3rem 0 0 0 rgba(79, 70, 229, 0.1);
 }
 
 .import-shell__totals-cell--selected {
   background: rgba(79, 70, 229, 0.2);
+  box-shadow: 0.3rem 0 0 0 rgba(79, 70, 229, 0.2);
   color: #4f46e5;
   font-weight: 600;
+}
+
+/* Clicking a cell highlights its whole month column; like the hover fill above, the strip
+   carries that highlight flush to the divider. Placed after the hover/column/selected rules
+   so it clears the strip for the final column — which has no gap or divider to its right.
+   (Equal specificity to :hover; source order breaks the tie.) */
+.import-shell__totals-cell:last-child {
+  box-shadow: none;
 }
 
 .import-shell__totals-cell--net {
