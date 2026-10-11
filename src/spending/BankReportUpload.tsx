@@ -1,5 +1,5 @@
-import type { ImportedTransaction } from "./csvParser";
-import type { KnownCategory } from "./categories";
+import type { ImportedTransaction } from "./lib/csvParser";
+import type { KnownCategory } from "./lib/categories";
 import CustomImportPanel from "./CustomImportPanel";
 
 // A single imported bank report (its parsed transactions kept in memory alongside the

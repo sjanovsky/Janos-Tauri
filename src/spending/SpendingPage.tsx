@@ -1,16 +1,22 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ImportedTransaction } from "./csvParser";
-import BankReportUpload, { type UploadedFileView } from "./BankReportUpload";
-import BucketsAndCategories from "./BucketsAndCategories";
-import Modal from "./Modal";
-import { buildBankSeries, buildChartSeries, parseDate, resolveBucketKey, type ChartRange } from "./transactionSummary";
-import { computeDivergingScale } from "./chartScale";
+import type { ImportedTransaction } from "./lib/csvParser";
+import type { UploadedFileView } from "./BankReportUpload";
+import SpendingChart, {
+  type BucketChartPoint,
+  type BucketMeta,
+  type BucketSegment,
+  type GroupMode,
+  type TotalsDisplayRow,
+} from "./SpendingChart";
+import TransactionList, { type SortKey, type SortState } from "./TransactionList";
+import UploadModal from "./UploadModal";
+import BucketsModal from "./BucketsModal";
+import { buildBankSeries, buildChartSeries, parseDate, resolveBucketKey, type ChartRange } from "./lib/transactionSummary";
+import { computeDivergingScale } from "./lib/chartScale";
 import {
   BUCKET_COLOR_PALETTE,
   DEFAULT_CATEGORIES,
-  RESERVED_CATEGORIES,
   applyCategoryRecords,
   deriveCategoryList,
   generateCategoryId,
@@ -18,107 +24,12 @@ import {
   getCategoryLabel,
   isReservedCategory,
   nextBucketColor,
-  resolveCategoryInput,
   UNGROUPED_BUCKET_COLOR,
   UNGROUPED_BUCKET_ID,
   type Category,
   type CategoryRecord,
   type BucketRecord,
-} from "./categories";
-import "./BankImportPage.css";
-
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
-
-// Whole-dollar currency (no cents) for the chart's bar totals and the spending totals table.
-const wholeCurrencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
-const COLUMN_BASIS_BY_RANGE: Record<ChartRange, number> = { day: 26, month: 60, year: 84 };
-
-const AXIS_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-// Compact x-axis labels derived from a bucket key (YYYY, YYYY-MM, or YYYY-MM-DD):
-// year -> "2026", month -> "Oct'26", day -> "Oct 3".
-function formatAxisLabel(key: string, range: ChartRange): string {
-  const [year, month, day] = key.split("-");
-  if (range === "year") {
-    return year;
-  }
-  const monthName = AXIS_MONTHS[Number.parseInt(month, 10) - 1] ?? month;
-  if (range === "month") {
-    return `${monthName}'${year.slice(-2)}`;
-  }
-  return `${monthName} ${Number.parseInt(day, 10)}`;
-}
-
-// The chart stacks one segment per spending bucket (categories are summed into their bucket).
-type BucketSegment = {
-  bucketId: string;
-  label: string;
-  color: string;
-  value: number;
-};
-
-type BucketChartPoint = {
-  key: string;
-  label: string;
-  segments: BucketSegment[];
-};
-
-type BucketMeta = { id: string; name: string; color: string };
-
-// The chart can stack spending by bucket (categories rolled into buckets) or by the bank
-// each transaction was imported from.
-type GroupMode = "bucket" | "bank";
-
-type TooltipAnchor = {
-  point: BucketChartPoint;
-  x: number;
-  y: number;
-};
-
-type ViewMode = "uploads" | "master";
-
-// Each bucket's section renders its categories as line items, then the bucket total at the
-// bottom. `perColumn` holds the value for each time column in the chart. `color` is the
-// bucket's color (shared across the whole section); `sectionStart` marks the first line item.
-type TotalsDisplayRow =
-  | {
-      kind: "category";
-      key: string;
-      category: string;
-      perColumn: number[];
-      color: string;
-      sectionStart: boolean;
-    }
-  | {
-      kind: "bucketTotal";
-      key: string;
-      bucketId: string;
-      label: string;
-      perColumn: number[];
-      color: string;
-    };
-
-type SortKey = "date" | "description" | "bank" | "amount" | "category";
-type SortDirection = "asc" | "desc";
-type SortState = { key: SortKey; direction: SortDirection };
-
-const SORT_COLUMNS: { key: SortKey; label: string }[] = [
-  { key: "date", label: "Date" },
-  { key: "description", label: "Description" },
-  { key: "bank", label: "Bank" },
-  { key: "category", label: "Category" },
-  { key: "amount", label: "Amount" },
-];
-
+} from "./lib/categories";
 function sortValue(transaction: ImportedTransaction, key: SortKey): string | number {
   switch (key) {
     case "date":
@@ -135,12 +46,10 @@ function sortValue(transaction: ImportedTransaction, key: SortKey): string | num
   }
 }
 
-function ImportAppShell() {
-  const [view, setView] = useState<ViewMode>("uploads");
+function SpendingPage() {
   const [uploads, setUploads] = useState<UploadedFileView[]>([]);
   const [chartRange, setChartRange] = useState<ChartRange>("month");
   const [groupMode, setGroupMode] = useState<GroupMode>("bucket");
-  const [tooltipAnchor, setTooltipAnchor] = useState<TooltipAnchor | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [dbError, setDbError] = useState<string | null>(null);
   const [selectedBucketKey, setSelectedBucketKey] = useState<string | null>(null);
@@ -772,581 +681,59 @@ function ImportAppShell() {
 
   return (
     <>
-      <div className="import-shell">
-      <header className="import-shell__topbar">
-        <div className="import-shell__brand">Janos</div>
-        <nav className="import-shell__tabs">
-          <button
-            className={`shell-tab ${view === "uploads" ? "shell-tab--active" : ""}`}
-            onClick={() => setView("uploads")}
-          >
-            Uploads
-          </button>
-          <button
-            className={`shell-tab ${view === "master" ? "shell-tab--active" : ""}`}
-            onClick={() => setView("master")}
-          >
-            Spending
-          </button>
-        </nav>
-      </header>
+      {dbError && <div className="import-shell__db-error">{dbError}</div>}
+      <section className="import-shell__panel">
+        <div className="import-shell__master-layout">
+          <SpendingChart
+            hasTransactions={masterTransactions.length > 0}
+            selectedCategories={selectedCategories}
+            chartRange={chartRange}
+            groupMode={groupMode}
+            activeSeries={activeSeries}
+            chartScale={chartScale}
+            activeTotals={activeTotals}
+            selectedBucketKey={selectedBucketKey}
+            selectedCategory={selectedCategory}
+            selectedBucketId={selectedBucketId}
+            onRangeChange={handleRangeChange}
+            onGroupModeChange={handleGroupModeChange}
+            onToggleBucket={toggleBucket}
+            onToggleSegment={toggleSegment}
+            onToggleBucketSegment={toggleBucketSegment}
+            onToggleCategoryFilter={toggleCategoryFilter}
+            onToggleBucketFilter={toggleBucketFilter}
+            onOpenUpload={() => setUploadOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
 
-      <main className="import-shell__content">
-        {dbError && <div className="import-shell__db-error">{dbError}</div>}
-        {view === "uploads" ? (
-          <section className="import-shell__panel">
-            <div className="import-shell__header">
-              <div>
-                <p className="import-shell__eyebrow">Import workspace</p>
-                <h1>Upload bank statements</h1>
-              </div>
-            </div>
-
-            <div className="import-shell__secondary-row">
-              <BankReportUpload {...bankReportUploadProps} />
-
-              <BucketsAndCategories {...bucketsAndCategoriesProps} />
-            </div>
-          </section>
-        ) : (
-          <section className="import-shell__panel">
-            <div className="import-shell__master-layout">
-            <div className="import-shell__chart-card">
-              <div className="import-shell__chart-header">
-                <div>
-                  <h2>Spending by {chartRange}</h2>
-                </div>
-                <div className="import-shell__chart-tools">
-                  <button
-                    type="button"
-                    className="import-shell__upload-button"
-                    onClick={() => setUploadOpen(true)}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="15"
-                      height="15"
-                      aria-hidden="true"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="17 8 12 3 7 8" />
-                      <line x1="12" y1="3" x2="12" y2="15" />
-                    </svg>
-                    Upload
-                  </button>
-
-                  <button
-                    type="button"
-                    className="import-shell__settings-button"
-                    aria-label="Open buckets and categories settings"
-                    title="Buckets & categories"
-                    onClick={() => setSettingsOpen(true)}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="16"
-                      height="16"
-                      aria-hidden="true"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {masterTransactions.length === 0 ? (
-                <div className="import-shell__empty">No chart data available yet.</div>
-              ) : (
-                <>
-                  {selectedCategories.length === 0 ? (
-                    <div className="import-shell__empty">Select at least one category to see the chart.</div>
-                  ) : (
-                    <div className="import-shell__chart-grid" aria-label="Transaction summary chart">
-                      <div className="import-shell__chart-gutter">
-                        <div className="import-shell__y-axis">
-                          <div
-                            className="import-shell__group-toggle"
-                            role="group"
-                            aria-label="Group spending by"
-                          >
-                            {(["bucket", "bank"] as GroupMode[]).map((mode) => (
-                              <button
-                                key={mode}
-                                type="button"
-                                className={`group-pill ${groupMode === mode ? "group-pill--active" : ""}`}
-                                aria-pressed={groupMode === mode}
-                                onClick={() => handleGroupModeChange(mode)}
-                              >
-                                {mode === "bucket" ? "Buckets" : "Banks"}
-                              </button>
-                            ))}
-                          </div>
-                          {chartScale.ticks.map((tick) => (
-                            <span
-                              key={tick}
-                              className="import-shell__y-axis-tick"
-                              style={{ top: `${((chartScale.positiveMax - tick) / chartScale.totalRange) * 100}%` }}
-                            >
-                              {tick.toLocaleString()}
-                            </span>
-                          ))}
-                        </div>
-
-                        <div className="import-shell__x-axis-toggle">
-                          <div className="import-shell__range-switcher">
-                            {(["day", "month", "year"] as ChartRange[]).map((range) => (
-                              <button
-                                key={range}
-                                type="button"
-                                className={`range-pill ${chartRange === range ? "range-pill--active" : ""}`}
-                                onClick={() => handleRangeChange(range)}
-                              >
-                                {range === "day" ? "Days" : range === "month" ? "Months" : "Years"}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {activeTotals.displayRows.length > 0 && (
-                          <div
-                            className={`import-shell__totals-labels ${
-                              groupMode === "bank" ? "import-shell__totals-labels--standalone" : ""
-                            }`}
-                          >
-                            {activeTotals.displayRows.map((row) => {
-                              if (row.kind === "bucketTotal") {
-                                const rowSelected =
-                                  selectedBucketId === row.bucketId && !selectedBucketKey && !selectedCategory;
-                                return (
-                                  <button
-                                    key={row.key}
-                                    type="button"
-                                    className={`import-shell__totals-label import-shell__totals-label--bucket ${
-                                      rowSelected ? "import-shell__totals-label--selected" : ""
-                                    }`}
-                                    style={{ "--bucket": row.color } as CSSProperties}
-                                    title={`Filter the table to ${row.label}`}
-                                    aria-pressed={rowSelected}
-                                    onClick={() => toggleBucketFilter(row.bucketId)}
-                                  >
-                                    <span className="import-shell__totals-label-text">{row.label}</span>
-                                  </button>
-                                );
-                              }
-
-                              const rowSelected =
-                                selectedCategory === row.category && !selectedBucketKey && !selectedBucketId;
-                              return (
-                                <button
-                                  key={row.key}
-                                  type="button"
-                                  className={`import-shell__totals-label import-shell__totals-label--item ${
-                                    row.sectionStart ? "import-shell__totals-label--section-start" : ""
-                                  } ${rowSelected ? "import-shell__totals-label--selected" : ""}`}
-                                  style={{ "--bucket": row.color } as CSSProperties}
-                                  title={`Filter the table to ${getCategoryLabel(row.category)}`}
-                                  aria-pressed={rowSelected}
-                                  onClick={() => toggleCategoryFilter(row.category)}
-                                >
-                                  <span className="import-shell__totals-label-text">{getCategoryLabel(row.category)}</span>
-                                </button>
-                              );
-                            })}
-                            <div className="import-shell__totals-label import-shell__totals-label--net">Net</div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="import-shell__chart-scroll">
-                        <div className="import-shell__chart-track">
-                          <div className="import-shell__chart-plot">
-                            {chartScale.ticks.map((tick) => (
-                              <div
-                                key={tick}
-                                className="import-shell__gridline"
-                                style={{ top: `${((chartScale.positiveMax - tick) / chartScale.totalRange) * 100}%` }}
-                              />
-                            ))}
-                            <div
-                              className="import-shell__baseline"
-                              style={{ top: `${(chartScale.positiveMax / chartScale.totalRange) * 100}%` }}
-                            />
-
-                            <div className="import-shell__chart-bars">
-                              {activeSeries.map((point) => {
-                                const baselinePct = (chartScale.positiveMax / chartScale.totalRange) * 100;
-                                const positiveSegments = point.segments.filter((segment) => segment.value > 0);
-                                const negativeSegments = point.segments.filter((segment) => segment.value < 0);
-
-                                let positiveCursor = 0;
-                                const positiveRects = positiveSegments.map((segment, index) => {
-                                  positiveCursor += segment.value;
-                                  const heightPct = (segment.value / chartScale.totalRange) * 100;
-                                  const topPct = baselinePct - (positiveCursor / chartScale.totalRange) * 100;
-                                  return {
-                                    segment,
-                                    topPct,
-                                    heightPct,
-                                    borderRadius: index === positiveSegments.length - 1 ? "4px 4px 0 0" : "0",
-                                  };
-                                });
-
-                                let negativeCursor = 0;
-                                const negativeRects = negativeSegments.map((segment, index) => {
-                                  const magnitude = Math.abs(segment.value);
-                                  const topPct = baselinePct + (negativeCursor / chartScale.totalRange) * 100;
-                                  negativeCursor += magnitude;
-                                  const heightPct = (magnitude / chartScale.totalRange) * 100;
-                                  return {
-                                    segment,
-                                    topPct,
-                                    heightPct,
-                                    borderRadius: index === negativeSegments.length - 1 ? "0 0 4px 4px" : "0",
-                                  };
-                                });
-
-                                const allRects = [...positiveRects, ...negativeRects];
-                                const tooltipTopPct =
-                                  allRects.length > 0 ? Math.min(...allRects.map((rect) => rect.topPct)) : baselinePct;
-                                const barTotal = point.segments.reduce((sum, segment) => sum + segment.value, 0);
-
-                                const isSelected = selectedBucketKey === point.key;
-
-                                const anchorTooltip = (rect: DOMRect) => {
-                                  setTooltipAnchor({
-                                    point,
-                                    x: rect.left + rect.width / 2,
-                                    y: rect.top + (tooltipTopPct / 100) * rect.height,
-                                  });
-                                };
-                                const clearTooltip = () => {
-                                  setTooltipAnchor((current) => (current?.point.label === point.label ? null : current));
-                                };
-
-                                return (
-                                  <div
-                                    key={point.label}
-                                    className={`import-shell__bar-col ${isSelected ? "import-shell__bar-col--selected" : ""}`}
-                                    style={{ flex: `1 0 ${COLUMN_BASIS_BY_RANGE[chartRange]}px` }}
-                                    tabIndex={0}
-                                    role="button"
-                                    aria-pressed={isSelected}
-                                    aria-label={`Filter the table to ${point.label}`}
-                                    onClick={() => toggleBucket(point.key)}
-                                    onKeyDown={(event) => {
-                                      if (event.key === "Enter" || event.key === " ") {
-                                        event.preventDefault();
-                                        toggleBucket(point.key);
-                                      }
-                                    }}
-                                    onMouseEnter={(event) => anchorTooltip(event.currentTarget.getBoundingClientRect())}
-                                    onMouseLeave={clearTooltip}
-                                    onFocus={(event) => anchorTooltip(event.currentTarget.getBoundingClientRect())}
-                                    onBlur={clearTooltip}
-                                  >
-                                    {allRects.length > 0 && (
-                                      <span
-                                        className="import-shell__bar-total"
-                                        style={{ top: `${tooltipTopPct}%` }}
-                                      >
-                                        {wholeCurrencyFormatter.format(barTotal)}
-                                      </span>
-                                    )}
-                                    {allRects.map(({ segment, topPct, heightPct, borderRadius }) => {
-                                      const segmentSelected = isSelected && selectedBucketId === segment.bucketId;
-                                      const segmentDimmed =
-                                        selectedBucketId !== null && segment.bucketId !== selectedBucketId;
-
-                                      return (
-                                        <div
-                                          key={segment.bucketId}
-                                          className={`import-shell__bar-segment ${segmentSelected ? "import-shell__bar-segment--selected" : ""} ${segmentDimmed ? "import-shell__bar-segment--dimmed" : ""}`}
-                                          style={{
-                                            top: `calc(${topPct}% + 1px)`,
-                                            height: `calc(${heightPct}% - 2px)`,
-                                            width: "75%",
-                                            background: segment.color,
-                                            borderRadius,
-                                          }}
-                                          aria-label={`Filter the table to ${point.label} ${segment.label}: ${currencyFormatter.format(segment.value)}`}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            toggleBucketSegment(point.key, segment.bucketId);
-                                          }}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          <div className="import-shell__x-axis">
-                            {activeSeries.map((point) => (
-                              <div
-                                key={point.key}
-                                className="import-shell__x-axis-label"
-                                style={{ flex: `1 0 ${COLUMN_BASIS_BY_RANGE[chartRange]}px` }}
-                                title={point.label}
-                              >
-                                {formatAxisLabel(point.key, chartRange)}
-                              </div>
-                            ))}
-                          </div>
-
-                          {activeTotals.displayRows.length > 0 && (
-                            <div
-                              className={`import-shell__totals-values ${
-                                groupMode === "bank" ? "import-shell__totals-values--standalone" : ""
-                              }`}
-                            >
-                              {activeTotals.displayRows.map((row) => {
-                                if (row.kind === "bucketTotal") {
-                                  return (
-                                    <div
-                                      key={row.key}
-                                      className="import-shell__totals-row import-shell__totals-row--bucket"
-                                      style={{ "--bucket": row.color } as CSSProperties}
-                                    >
-                                      {row.perColumn.map((value, index) => {
-                                        const point = activeSeries[index];
-                                        const columnSelected = selectedBucketKey === point.key;
-                                        const cellSelected = columnSelected && selectedBucketId === row.bucketId;
-                                        return (
-                                          <button
-                                            key={point.key}
-                                            type="button"
-                                            className={`import-shell__totals-cell import-shell__totals-cell--bucket ${columnSelected ? "import-shell__totals-cell--column" : ""} ${cellSelected ? "import-shell__totals-cell--selected" : ""}`}
-                                            style={{ flex: `1 0 ${COLUMN_BASIS_BY_RANGE[chartRange]}px` }}
-                                            aria-label={`Filter the table to ${point.label} ${row.label}: ${currencyFormatter.format(value)}`}
-                                            onClick={() => toggleBucketSegment(point.key, row.bucketId)}
-                                          >
-                                            {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  );
-                                }
-
-                                return (
-                                  <div
-                                    key={row.key}
-                                    className={`import-shell__totals-row import-shell__totals-row--item ${
-                                      row.sectionStart ? "import-shell__totals-row--section-start" : ""
-                                    }`}
-                                    style={{ "--bucket": row.color } as CSSProperties}
-                                  >
-                                    {row.perColumn.map((value, index) => {
-                                      const point = activeSeries[index];
-                                      const columnSelected = selectedBucketKey === point.key;
-                                      const cellSelected = columnSelected && selectedCategory === row.category;
-                                      return (
-                                        <button
-                                          key={point.key}
-                                          type="button"
-                                          className={`import-shell__totals-cell ${columnSelected ? "import-shell__totals-cell--column" : ""} ${cellSelected ? "import-shell__totals-cell--selected" : ""}`}
-                                          style={{ flex: `1 0 ${COLUMN_BASIS_BY_RANGE[chartRange]}px` }}
-                                          aria-label={`Filter the table to ${point.label} ${getCategoryLabel(row.category)}: ${currencyFormatter.format(value)}`}
-                                          onClick={() => toggleSegment(point.key, row.category)}
-                                        >
-                                          {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                );
-                              })}
-
-                              <div className="import-shell__totals-row import-shell__totals-row--net">
-                                {activeTotals.netPerColumn.map((value, index) => {
-                                  const point = activeSeries[index];
-                                  const columnSelected = selectedBucketKey === point.key;
-                                  return (
-                                    <button
-                                      key={point.key}
-                                      type="button"
-                                      className={`import-shell__totals-cell import-shell__totals-cell--net ${columnSelected ? "import-shell__totals-cell--column" : ""}`}
-                                      style={{ flex: `1 0 ${COLUMN_BASIS_BY_RANGE[chartRange]}px` }}
-                                      aria-label={`Filter the table to ${point.label}: ${currencyFormatter.format(value)}`}
-                                      onClick={() => toggleBucket(point.key)}
-                                    >
-                                      {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="import-shell__master-right">
-            {(selectedBucketKey || selectedCategory || selectedBucketId) && (
-              <div className="import-shell__table-filter">
-                <span>
-                  Filtered to{" "}
-                  {selectedBucketKey && <strong>{selectedBucketLabel}</strong>}
-                  {selectedBucketKey && (selectedCategory || selectedBucketId) && " · "}
-                  {selectedCategory && <strong>{getCategoryLabel(selectedCategory)}</strong>}
-                  {selectedBucketId && selectedBucketName && <strong>{selectedBucketName}</strong>}
-                </span>
-                <button type="button" onClick={clearTableFilter}>
-                  Clear
-                </button>
-              </div>
-            )}
-
-            <div className="import-shell__table-shell">
-              {tableTransactions.length === 0 ? (
-                <div className="import-shell__empty">
-                  {masterTransactions.length === 0
-                    ? "No transactions have been imported yet."
-                    : "No transactions match this filter."}
-                </div>
-              ) : (
-                <table className="import-shell__table">
-                  <thead>
-                    <tr>
-                      {SORT_COLUMNS.map((column) => {
-                        const activeSort = tableSort && tableSort.key === column.key ? tableSort : null;
-                        const ariaSort = activeSort
-                          ? activeSort.direction === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "none";
-                        return (
-                          <th
-                            key={column.key}
-                            aria-sort={ariaSort}
-                            className={column.key === "amount" ? "import-shell__cell--amount" : undefined}
-                          >
-                            <button
-                              type="button"
-                              className={`import-shell__sort-button ${activeSort ? "import-shell__sort-button--active" : ""}`}
-                              onClick={() => toggleSort(column.key)}
-                            >
-                              {column.label}
-                              <span className="import-shell__sort-caret" aria-hidden="true">
-                                {activeSort ? (activeSort.direction === "asc" ? "↑" : "↓") : "↓"}
-                              </span>
-                            </button>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedTransactions.map((transaction) => (
-                      <tr key={transaction.id}>
-                        <td>{transaction.date}</td>
-                        <td>{transaction.description}</td>
-                        <td>{transaction.sourceBank}</td>
-                        <td>
-                          <input
-                            key={transaction.category}
-                            list="category-suggestions"
-                            className={`import-shell__category-input ${
-                              transaction.category === "unclassified"
-                                ? "import-shell__category-input--unclassified"
-                                : ""
-                            }`}
-                            defaultValue={getCategoryLabel(transaction.category)}
-                            onBlur={(event) => {
-                              const nextCategory = resolveCategoryInput(event.target.value, knownCategories);
-                              if (nextCategory !== transaction.category) {
-                                handleCategoryChange(transaction.id, nextCategory);
-                              }
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.currentTarget.blur();
-                              }
-                            }}
-                          />
-                        </td>
-                        <td className="import-shell__cell--amount">
-                          {currencyFormatter.format(transaction.amount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="import-shell__table-total-row">
-                      <td colSpan={SORT_COLUMNS.length - 1}>Total</td>
-                      <td className="import-shell__cell--amount">{currencyFormatter.format(tableTotal)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              )}
-            </div>
-            </div>
-            </div>
-
-            <datalist id="category-suggestions">
-              {[...categoryList, ...RESERVED_CATEGORIES].map((category) => (
-                <option key={category} value={getCategoryLabel(category)} />
-              ))}
-            </datalist>
-          </section>
-        )}
-      </main>
-      </div>
-
-      {tooltipAnchor &&
-        createPortal(
-          <div
-            className="import-shell__tooltip"
-            role="tooltip"
-            style={{
-              position: "fixed",
-              left: tooltipAnchor.x,
-              top: tooltipAnchor.y,
-              transform: "translate(-50%, calc(-100% - 8px))",
-            }}
-          >
-            <div className="import-shell__tooltip-title">{tooltipAnchor.point.label}</div>
-            {tooltipAnchor.point.segments.map((segment) => (
-              <div key={segment.bucketId} className="import-shell__tooltip-row">
-                <span className="import-shell__tooltip-key" style={{ background: segment.color }} />
-                <strong>{currencyFormatter.format(segment.value)}</strong>
-                <span>{segment.label}</span>
-              </div>
-            ))}
-          </div>,
-          document.body,
-        )}
+          <TransactionList
+            transactions={sortedTransactions}
+            total={tableTotal}
+            hasAnyTransactions={masterTransactions.length > 0}
+            selectedBucketKey={selectedBucketKey}
+            selectedCategory={selectedCategory}
+            selectedBucketId={selectedBucketId}
+            selectedBucketLabel={selectedBucketLabel}
+            selectedBucketName={selectedBucketName}
+            onClearFilter={clearTableFilter}
+            sort={tableSort}
+            onToggleSort={toggleSort}
+            categoryList={categoryList}
+            knownCategories={knownCategories}
+            onCategoryChange={handleCategoryChange}
+          />
+        </div>
+      </section>
 
       {settingsOpen && (
-        <Modal label="Buckets and categories" onClose={() => setSettingsOpen(false)}>
-          <BucketsAndCategories {...bucketsAndCategoriesProps} />
-        </Modal>
+        <BucketsModal {...bucketsAndCategoriesProps} onClose={() => setSettingsOpen(false)} />
       )}
 
       {uploadOpen && (
-        <Modal label="Upload bank report" onClose={() => setUploadOpen(false)}>
-          <BankReportUpload {...bankReportUploadProps} />
-        </Modal>
+        <UploadModal {...bankReportUploadProps} onClose={() => setUploadOpen(false)} />
       )}
     </>
   );
 }
 
-export default ImportAppShell;
+export default SpendingPage;

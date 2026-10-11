@@ -6,7 +6,7 @@ import {
   UNGROUPED_BUCKET_ID,
   type BucketRecord,
   type CategoryRecord,
-} from "./categories";
+} from "./lib/categories";
 
 type BucketsAndCategoriesProps = {
   categories: CategoryRecord[];

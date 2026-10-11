@@ -1,7 +1,7 @@
 import { useMemo, useState, type ChangeEvent, type DragEvent } from "react";
-import type { ImportedTransaction } from "./csvParser";
-import type { KnownCategory } from "./categories";
-import { buildTransactionsFromMapping, guessColumnIndex, parseDelimitedText, type ParsedTable } from "./genericParser";
+import type { ImportedTransaction } from "./lib/csvParser";
+import type { KnownCategory } from "./lib/categories";
+import { buildTransactionsFromMapping, guessColumnIndex, parseDelimitedText, type ParsedTable } from "./lib/genericParser";
 
 const PREVIEW_ROW_LIMIT = 10;
 

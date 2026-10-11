@@ -1,5 +1,5 @@
-mod commands;
 mod db;
+mod spending;
 
 use db::{init_db, DbState};
 use rusqlite::Connection;
@@ -83,18 +83,18 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
-            commands::list_uploads,
-            commands::add_upload,
-            commands::delete_upload,
-            commands::rename_upload,
-            commands::update_transaction_category,
-            commands::list_categories,
-            commands::upsert_category,
-            commands::set_category_placement,
-            commands::list_buckets,
-            commands::upsert_bucket,
-            commands::delete_bucket,
-            commands::delete_category,
+            spending::list_uploads,
+            spending::add_upload,
+            spending::delete_upload,
+            spending::rename_upload,
+            spending::update_transaction_category,
+            spending::list_categories,
+            spending::upsert_category,
+            spending::set_category_placement,
+            spending::list_buckets,
+            spending::upsert_bucket,
+            spending::delete_bucket,
+            spending::delete_category,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

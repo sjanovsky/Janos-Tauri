@@ -1,8 +1,8 @@
-import ImportAppShell from "./import/ImportAppShell";
+import AppShell from "./AppShell";
 import "./App.css";
 
 function App() {
-  return <ImportAppShell />;
+  return <AppShell />;
 }
 
 export default App;
