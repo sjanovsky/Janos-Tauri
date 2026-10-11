@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import type { ImportedTransaction } from "./lib/csvParser";
 import type { KnownCategory } from "./lib/categories";
+import { buildBankLogoMap, normalizeBankName, type BankRecord } from "./lib/banks";
 import CustomImportPanel from "./CustomImportPanel";
 
 // A single imported bank report (its parsed transactions kept in memory alongside the
@@ -32,6 +34,7 @@ function formatUploadDate(value: string): string {
 type BankReportUploadProps = {
   uploads: UploadedFileView[];
   knownCategories: KnownCategory[];
+  bankRecords: BankRecord[];
   onImport: (bankName: string, fileName: string, transactions: ImportedTransaction[]) => Promise<boolean>;
   onDeleteUpload: (uploadId: string) => void;
   onRenameUpload: (uploadId: string, fileName: string) => void;
@@ -64,13 +67,16 @@ function TrashIcon() {
 function BankReportUpload({
   uploads,
   knownCategories,
+  bankRecords,
   onImport,
   onDeleteUpload,
   onRenameUpload,
 }: BankReportUploadProps) {
+  const bankLogoByName = useMemo(() => buildBankLogoMap(bankRecords), [bankRecords]);
+
   return (
     <div className="bank-report-upload">
-      <CustomImportPanel onImport={onImport} knownCategories={knownCategories} />
+      <CustomImportPanel onImport={onImport} knownCategories={knownCategories} bankRecords={bankRecords} />
 
       <div className="bank-report-upload__recent">
         <div className="import-shell__uploads-heading">
@@ -122,7 +128,22 @@ function BankReportUpload({
                         }}
                       />
                     </td>
-                    <td>{upload.bankName}</td>
+                    <td>
+                      {(() => {
+                        const bankLogo = bankLogoByName[normalizeBankName(upload.bankName)];
+                        return bankLogo ? (
+                          <div className="import-shell__bank-badge" title={upload.bankName}>
+                            <img
+                              src={bankLogo}
+                              alt={`${upload.bankName} logo`}
+                              className="import-shell__bank-logo"
+                            />
+                          </div>
+                        ) : (
+                          <span className="import-shell__bank-name">{upload.bankName}</span>
+                        );
+                      })()}
+                    </td>
                     <td className="import-shell__cell--amount">{upload.transactions.length}</td>
                     <td className="uploads-table__actions">
                       <button

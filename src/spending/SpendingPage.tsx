@@ -922,6 +922,7 @@ function SpendingPage() {
   const bankReportUploadProps = {
     uploads,
     knownCategories,
+    bankRecords,
     onImport: persistUpload,
     onDeleteUpload: handleDeleteUpload,
     onRenameUpload: handleRenameUpload,

@@ -451,8 +451,6 @@ function BucketsAndCategories({
             : undefined
         }
       >
-        <span className="cat-pill__swatch" aria-hidden="true" />
-
         {isEditing ? (
           <input
             ref={editInputRef}
@@ -510,6 +508,10 @@ function BucketsAndCategories({
       </div>
 
       <div className="bucket-board">
+        <div className="bucket-board__header">
+          <span className="bucket-board__header-label">Bucket</span>
+          <span className="bucket-board__header-label">Categories</span>
+        </div>
         {displayBuckets().map((bucket) => {
           const members = displayMembers(bucket.id);
           const isOver = dragOverKey === bucket.id;
@@ -573,14 +575,6 @@ function BucketsAndCategories({
                     }
                   }}
                 />
-                <button
-                  type="button"
-                  className="import-shell__upload-delete bucket-row__delete"
-                  aria-label={`Delete bucket ${bucket.name}`}
-                  onClick={() => onDeleteBucket(bucket.id)}
-                >
-                  <TrashIcon />
-                </button>
               </div>
 
               <div className="bucket-row__items">
@@ -590,6 +584,15 @@ function BucketsAndCategories({
                   members.map((category) => renderPill(category, bucket.color, bucket.id))
                 )}
               </div>
+
+              <button
+                type="button"
+                className="import-shell__upload-delete bucket-row__delete"
+                aria-label={`Delete bucket ${bucket.name}`}
+                onClick={() => onDeleteBucket(bucket.id)}
+              >
+                <TrashIcon />
+              </button>
             </div>
           );
         })}

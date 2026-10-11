@@ -1,13 +1,16 @@
 import { useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import type { ImportedTransaction } from "./lib/csvParser";
 import type { KnownCategory } from "./lib/categories";
+import type { BankRecord } from "./lib/banks";
 import { buildTransactionsFromMapping, guessColumnIndex, parseDelimitedText, type ParsedTable } from "./lib/genericParser";
+import BankSelect from "./BankSelect";
 
 const PREVIEW_ROW_LIMIT = 10;
 
 type CustomImportPanelProps = {
   onImport: (bankName: string, fileName: string, transactions: ImportedTransaction[]) => Promise<boolean>;
   knownCategories: KnownCategory[];
+  bankRecords: BankRecord[];
 };
 
 type MappingField = "dateIndex" | "amountIndex" | "descriptionIndex" | "categoryIndex";
@@ -26,7 +29,7 @@ const EMPTY_MAPPING: ColumnMappingState = {
   categoryIndex: null,
 };
 
-function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps) {
+function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImportPanelProps) {
   const [parsed, setParsed] = useState<ParsedTable | null>(null);
   const [sourceFileName, setSourceFileName] = useState("");
   const [pasteText, setPasteText] = useState("");
@@ -280,15 +283,10 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
               </select>
             </label>
 
-            <label className="custom-import__field">
-              Bank name
-              <input
-                type="text"
-                value={bankName}
-                onChange={(event) => setBankName(event.target.value)}
-                placeholder="e.g. Chase, Venmo, Robinhood"
-              />
-            </label>
+            <div className="custom-import__field">
+              Bank
+              <BankSelect banks={bankRecords} value={bankName} onChange={setBankName} />
+            </div>
 
             <div className="custom-import__actions">
               <button type="button" className="custom-import__button" onClick={resetAll}>
