@@ -20,6 +20,12 @@ export const UNGROUPED_BUCKET_ID = "__ungrouped";
 // Neutral gray for the "Ungrouped" section, so it reads as distinct from real buckets.
 export const UNGROUPED_BUCKET_COLOR = "#94a3b8";
 
+// Sentinel id + color for the catch-all "Unclassified" section (uncategorized transactions).
+// Rendered in red so uncategorized spending stands out as needing attention; it only appears
+// while such transactions exist, and is never a real, user-managed bucket.
+export const UNCLASSIFIED_BUCKET_ID = "__unclassified";
+export const UNCLASSIFIED_BUCKET_COLOR = "#dc2626";
+
 // Sentinel id + color for the permanent "Exclude" tray. Categories dropped here are flagged
 // `excluded` and dropped from the spending chart/totals; it isn't a real bucket row.
 export const EXCLUDE_BUCKET_ID = "__exclude";
@@ -44,6 +50,9 @@ export function nextBucketColor(existingCount: number): string {
 
 export const RESERVED_CATEGORIES = ["unclassified", "transfers"] as const;
 export type ReservedCategory = (typeof RESERVED_CATEGORIES)[number];
+
+// Catch-all id for transactions whose category couldn't be determined on import.
+export const UNCLASSIFIED_CATEGORY = "unclassified";
 
 export const DEFAULT_CATEGORIES: string[] = ["restaurants", "groceries", "partying", "fixed", "stuff"];
 
@@ -88,6 +97,13 @@ function hashString(value: string): number {
 
 export function isReservedCategory(category: string): category is ReservedCategory {
   return (RESERVED_CATEGORIES as readonly string[]).includes(category);
+}
+
+// Categories kept out of the spending chart entirely. Transfers move money between the user's
+// own accounts, so they are never spending. Unclassified transactions, by contrast, are real
+// spending that just hasn't been categorized yet, so they can still appear in the chart.
+export function isTransferCategory(category: string): boolean {
+  return category === "transfers";
 }
 
 const categoryLabelOverrides = new Map<string, string>();

@@ -1,5 +1,5 @@
 import type { ImportedTransaction } from "./csvParser";
-import { isReservedCategory } from "./categories";
+import { isTransferCategory } from "./categories";
 
 export type ChartRange = "day" | "month" | "year";
 
@@ -57,7 +57,7 @@ function labelForKey(key: string, range: ChartRange): string {
 
 // Group transactions into time buckets, then into segments keyed by `dimensionOf`
 // (category, bank, …). Segments are emitted in `order`; any dimension not in `order`
-// is dropped. Reserved categories (e.g. transfers) are always excluded.
+// is dropped. Transfers are always excluded (they move money between the user's own accounts).
 function buildSeries(
   transactions: ImportedTransaction[],
   range: ChartRange,
@@ -67,7 +67,7 @@ function buildSeries(
   const buckets = new Map<string, Map<string, number>>();
 
   transactions.forEach((transaction) => {
-    if (isReservedCategory(transaction.category)) {
+    if (isTransferCategory(transaction.category)) {
       return;
     }
 

@@ -68,6 +68,9 @@ export type TotalsDisplayRow =
       label: string;
       perColumn: number[];
       color: string;
+      // Set when this bucket total is the whole section (a single-category bucket collapsed into
+      // one row), so it carries the gap a category line item would normally provide above it.
+      sectionStart?: boolean;
     };
 
 export type SpendingTotals = { displayRows: TotalsDisplayRow[]; netPerColumn: number[] };
@@ -244,8 +247,8 @@ function SpendingChart({
                               key={row.key}
                               type="button"
                               className={`import-shell__totals-label import-shell__totals-label--bucket ${
-                                rowSelected ? "import-shell__totals-label--selected" : ""
-                              }`}
+                                row.sectionStart ? "import-shell__totals-label--section-start" : ""
+                              } ${rowSelected ? "import-shell__totals-label--selected" : ""}`}
                               style={{ "--bucket": row.color } as CSSProperties}
                               title={`Filter the table to ${row.label}`}
                               aria-pressed={rowSelected}
@@ -428,7 +431,9 @@ function SpendingChart({
                             return (
                               <div
                                 key={row.key}
-                                className="import-shell__totals-row import-shell__totals-row--bucket"
+                                className={`import-shell__totals-row import-shell__totals-row--bucket ${
+                                  row.sectionStart ? "import-shell__totals-row--section-start" : ""
+                                }`}
                                 style={{ "--bucket": row.color } as CSSProperties}
                               >
                                 {row.perColumn.map((value, index) => {

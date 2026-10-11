@@ -23,7 +23,11 @@ import {
   getCategoryColor,
   getCategoryLabel,
   isReservedCategory,
+  isTransferCategory,
   nextBucketColor,
+  UNCLASSIFIED_BUCKET_COLOR,
+  UNCLASSIFIED_BUCKET_ID,
+  UNCLASSIFIED_CATEGORY,
   UNGROUPED_BUCKET_COLOR,
   UNGROUPED_BUCKET_ID,
   type Category,
@@ -88,9 +92,12 @@ function SpendingPage() {
       });
   }, []);
 
-  useEffect(() => {
-    applyCategoryRecords(categoryRecords);
-  }, [categoryRecords]);
+  // Sync the shared label/color lookups with the loaded records DURING render (not in an
+  // effect) so getCategoryLabel/getCategoryColor are fresh for this render and for the child
+  // components that read them. An effect runs after commit without scheduling a re-render, so
+  // the chart could keep showing raw lowercase ids (e.g. "travel" instead of "Travel") until
+  // some unrelated state change happened to re-render it.
+  useMemo(() => applyCategoryRecords(categoryRecords), [categoryRecords]);
 
   const masterTransactions = useMemo(() => uploads.flatMap((upload) => upload.transactions), [uploads]);
 
@@ -99,10 +106,18 @@ function SpendingPage() {
     [categoryRecords],
   );
 
-  const categoryList = useMemo(
-    () => deriveCategoryList(masterTransactions, categoryRecords.map((record) => record.id)),
-    [masterTransactions, categoryRecords],
+  // Unclassified isn't a user-defined category, but surface it alongside the defined ones while
+  // any uncategorized transactions exist so their spending shows in the chart. Once they're all
+  // categorized it drops back out (unlike defined categories, which stay even at zero spend).
+  const hasUnclassified = useMemo(
+    () => masterTransactions.some((transaction) => transaction.category === UNCLASSIFIED_CATEGORY),
+    [masterTransactions],
   );
+
+  const categoryList = useMemo(() => {
+    const defined = deriveCategoryList(masterTransactions, categoryRecords.map((record) => record.id));
+    return hasUnclassified ? [...defined, UNCLASSIFIED_CATEGORY] : defined;
+  }, [masterTransactions, categoryRecords, hasUnclassified]);
 
   // Current categories (id + label) used to match imported/typed category text back to an
   // existing category instead of creating a duplicate.
@@ -128,7 +143,7 @@ function SpendingPage() {
     () =>
       masterTransactions.filter(
         (transaction) =>
-          !isReservedCategory(transaction.category) &&
+          !isTransferCategory(transaction.category) &&
           !excludedCategories.has(transaction.category) &&
           selectedCategories.includes(transaction.category),
       ),
@@ -149,14 +164,22 @@ function SpendingPage() {
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((bucket) => ({ id: bucket.id, name: bucket.name, color: bucket.color }));
     metas.push({ id: UNGROUPED_BUCKET_ID, name: "Ungrouped", color: UNGROUPED_BUCKET_COLOR });
+    // Unclassified is its own catch-all section (below the real buckets and Ungrouped), shown
+    // only while uncategorized transactions exist.
+    if (hasUnclassified) {
+      metas.push({ id: UNCLASSIFIED_BUCKET_ID, name: "Unclassified", color: UNCLASSIFIED_BUCKET_COLOR });
+    }
     return metas;
-  }, [buckets]);
+  }, [buckets, hasUnclassified]);
 
   // Map a category to the id of the bucket it displays under (a real bucket, or "Ungrouped").
   const resolveDisplayBucketId = useMemo(() => {
     const bucketIdByCategory = new Map(categoryRecords.map((record) => [record.id, record.bucketId]));
     const realBucketIds = new Set(buckets.map((bucket) => bucket.id));
     return (category: string) => {
+      if (category === UNCLASSIFIED_CATEGORY) {
+        return UNCLASSIFIED_BUCKET_ID;
+      }
       const raw = bucketIdByCategory.get(category) ?? null;
       return raw && realBucketIds.has(raw) ? raw : UNGROUPED_BUCKET_ID;
     };
@@ -283,10 +306,16 @@ function SpendingPage() {
       if (!members || members.length === 0) {
         return;
       }
-      members
-        .slice()
-        .sort(byLabel)
-        .forEach((row, index) => {
+      const sorted = members.slice().sort(byLabel);
+
+      // Collapse a bucket that holds a single category whose name matches the bucket's into just
+      // the bucket-total row, instead of showing a redundant category line and an identical total.
+      const collapseSingle =
+        sorted.length === 1 &&
+        getCategoryLabel(sorted[0].category).trim().toLowerCase() === meta.name.trim().toLowerCase();
+
+      if (!collapseSingle) {
+        sorted.forEach((row, index) => {
           displayRows.push({
             kind: "category",
             key: `${meta.id}:${row.category}`,
@@ -296,6 +325,8 @@ function SpendingPage() {
             sectionStart: index === 0,
           });
         });
+      }
+
       displayRows.push({
         kind: "bucketTotal",
         key: `bucketTotal:${meta.id}`,
@@ -303,6 +334,8 @@ function SpendingPage() {
         label: meta.name,
         perColumn: sumRows(members),
         color: meta.color,
+        // When collapsed the total is the whole section, so it needs the gap a line item would give.
+        sectionStart: collapseSingle,
       });
     });
 
