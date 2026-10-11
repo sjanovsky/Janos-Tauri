@@ -1,4 +1,4 @@
-use super::models::{BucketRecord, CategoryRecord, TransactionRecord, UploadRecord};
+use super::models::{BankRecord, BucketRecord, CategoryRecord, TransactionRecord, UploadRecord};
 use crate::db::DbState;
 use rusqlite::params;
 use tauri::State;
@@ -221,6 +221,53 @@ pub fn set_category_positions(state: State<DbState>, ids: Vec<String>) -> Result
         }
     }
     tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_banks(state: State<DbState>) -> Result<Vec<BankRecord>, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT id, name, logo_data_url FROM banks ORDER BY name COLLATE NOCASE")
+        .map_err(|e| e.to_string())?;
+
+    let banks: Vec<BankRecord> = stmt
+        .query_map([], |row| {
+            Ok(BankRecord {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                logo_data_url: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(banks)
+}
+
+#[tauri::command]
+pub fn upsert_bank(
+    state: State<DbState>,
+    id: String,
+    name: String,
+    logo_data_url: Option<String>,
+) -> Result<(), String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO banks (id, name, logo_data_url) VALUES (?1, ?2, ?3)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name, logo_data_url = excluded.logo_data_url",
+        params![id, name, logo_data_url],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_bank(state: State<DbState>, id: String) -> Result<(), String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM banks WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 

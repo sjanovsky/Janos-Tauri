@@ -12,7 +12,9 @@ import SpendingChart, {
 import TransactionList, { type SortKey, type SortState } from "./TransactionList";
 import UploadModal from "./UploadModal";
 import BucketsModal from "./BucketsModal";
+import BankSettingsModal from "./BankSettingsModal";
 import { buildBankSeries, buildChartSeries, parseDate, resolveBucketKey, type ChartRange } from "./lib/transactionSummary";
+import type { BankRecord } from "./lib/banks";
 import { computeDivergingScale } from "./lib/chartScale";
 import {
   BUCKET_COLOR_PALETTE,
@@ -20,6 +22,7 @@ import {
   applyCategoryRecords,
   deriveCategoryList,
   generateCategoryId,
+  getCategoryBucketColor,
   getCategoryColor,
   getCategoryLabel,
   isReservedCategory,
@@ -62,7 +65,9 @@ function SpendingPage() {
   const [tableSort, setTableSort] = useState<SortState | null>(null);
   const [categoryRecords, setCategoryRecords] = useState<CategoryRecord[]>([]);
   const [buckets, setBuckets] = useState<BucketRecord[]>([]);
+  const [bankRecords, setBankRecords] = useState<BankRecord[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bankSettingsOpen, setBankSettingsOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
 
   useEffect(() => {
@@ -88,6 +93,15 @@ function SpendingPage() {
       .then(setBuckets)
       .catch((error) => {
         console.error("Failed to load buckets from the database", error);
+        setDbError("Couldn't reach the local database. Make sure the app is running via `npm run tauri dev`.");
+      });
+  }, []);
+
+  useEffect(() => {
+    invoke<BankRecord[]>("list_banks")
+      .then(setBankRecords)
+      .catch((error) => {
+        console.error("Failed to load banks from the database", error);
         setDbError("Couldn't reach the local database. Make sure the app is running via `npm run tauri dev`.");
       });
   }, []);
@@ -118,6 +132,61 @@ function SpendingPage() {
     const defined = deriveCategoryList(masterTransactions, categoryRecords.map((record) => record.id));
     return hasUnclassified ? [...defined, UNCLASSIFIED_CATEGORY] : defined;
   }, [masterTransactions, categoryRecords, hasUnclassified]);
+
+  const bucketColorByCategory = useMemo(
+    () =>
+      Object.fromEntries(
+        categoryList.map((category) => [category, getCategoryBucketColor(category, categoryRecords, buckets)]),
+      ),
+    [buckets, categoryList, categoryRecords],
+  );
+
+  const categoryOptionsByBucket = useMemo(() => {
+    const bucketOrder = new Map(
+      buckets
+        .slice()
+        .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
+        .map((bucket, index) => [bucket.id, { bucketLabel: bucket.name, index }]),
+    );
+    const grouped = new Map<string, { bucketLabel: string; options: { value: string; label: string }[] }>();
+
+    const addOption = (bucketId: string | null, bucketLabel: string, category: string) => {
+      const target = bucketId && bucketOrder.has(bucketId) ? bucketId : "__ungrouped";
+      const existing = grouped.get(target) ?? { bucketLabel, options: [] };
+      existing.options.push({ value: category, label: getCategoryLabel(category) });
+      grouped.set(target, existing);
+    };
+
+    const realBucketIds = new Set(buckets.map((bucket) => bucket.id));
+    Array.from(new Set(categoryList)).forEach((category) => {
+      const record = categoryRecords.find((item) => item.id === category);
+      if (record?.excluded) {
+        return;
+      }
+
+      if (category === UNCLASSIFIED_CATEGORY) {
+        addOption(null, "Unclassified", category);
+        return;
+      }
+
+      const bucketId = record?.bucketId && realBucketIds.has(record.bucketId) ? record.bucketId : null;
+      addOption(bucketId, bucketId ? bucketOrder.get(bucketId)?.bucketLabel ?? "Ungrouped" : "Ungrouped", category);
+    });
+
+    const orderedGroups = Array.from(grouped.entries()).map(([bucketId, group]) => ({
+      bucketLabel: group.bucketLabel,
+      options: group.options.sort((a, b) => a.label.localeCompare(b.label)),
+      bucketId,
+    }));
+
+    orderedGroups.sort((a, b) => {
+      const aIndex = a.bucketId === "__ungrouped" ? Number.MAX_SAFE_INTEGER : bucketOrder.get(a.bucketId)?.index ?? Number.MAX_SAFE_INTEGER;
+      const bIndex = b.bucketId === "__ungrouped" ? Number.MAX_SAFE_INTEGER : bucketOrder.get(b.bucketId)?.index ?? Number.MAX_SAFE_INTEGER;
+      return aIndex - bIndex;
+    });
+
+    return orderedGroups.map(({ bucketLabel, options }) => ({ bucketLabel, options }));
+  }, [buckets, categoryList, categoryRecords, hasUnclassified]);
 
   // Current categories (id + label) used to match imported/typed category text back to an
   // existing category instead of creating a duplicate.
@@ -633,6 +702,68 @@ function SpendingPage() {
     });
   };
 
+  const handleAddBank = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return;
+    }
+    const previousBanks = bankRecords;
+    const id = crypto.randomUUID();
+    setBankRecords((current) => [...current, { id, name: trimmed, logoDataUrl: null }]);
+
+    invoke("upsert_bank", { id, name: trimmed, logoDataUrl: null }).catch((error) => {
+      console.error("Failed to save the new bank to the database", error);
+      setDbError("Couldn't save that bank to the database.");
+      setBankRecords(previousBanks);
+    });
+  };
+
+  const handleUpdateBank = (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return;
+    }
+    const previousBanks = bankRecords;
+    const current = bankRecords.find((bank) => bank.id === id);
+    setBankRecords((records) =>
+      records.map((bank) => (bank.id === id ? { ...bank, name: trimmed } : bank)),
+    );
+
+    invoke("upsert_bank", { id, name: trimmed, logoDataUrl: current?.logoDataUrl ?? null }).catch((error) => {
+      console.error("Failed to save the bank rename to the database", error);
+      setDbError("Couldn't save that bank change to the database.");
+      setBankRecords(previousBanks);
+    });
+  };
+
+  const handleDeleteBank = (id: string) => {
+    const previousBanks = bankRecords;
+    setBankRecords((current) => current.filter((bank) => bank.id !== id));
+
+    invoke("delete_bank", { id }).catch((error) => {
+      console.error("Failed to delete the bank from the database", error);
+      setDbError("Couldn't delete that bank from the database.");
+      setBankRecords(previousBanks);
+    });
+  };
+
+  const handleSetBankLogo = (id: string, logoDataUrl: string | null) => {
+    const previousBanks = bankRecords;
+    const name = bankRecords.find((bank) => bank.id === id)?.name ?? "";
+    if (!name) {
+      return;
+    }
+    setBankRecords((current) =>
+      current.map((bank) => (bank.id === id ? { ...bank, logoDataUrl } : bank)),
+    );
+
+    invoke("upsert_bank", { id, name, logoDataUrl }).catch((error) => {
+      console.error("Failed to save the bank logo to the database", error);
+      setDbError("Couldn't save that bank logo to the database.");
+      setBankRecords(previousBanks);
+    });
+  };
+
   const handleAddBucket = (name: string) => {
     const previousBuckets = buckets;
     const id = crypto.randomUUID();
@@ -803,6 +934,7 @@ function SpendingPage() {
             onToggleBucketFilter={toggleBucketFilter}
             onOpenUpload={() => setUploadOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
+            onOpenBankSettings={() => setBankSettingsOpen(true)}
           />
 
           <TransactionList
@@ -818,8 +950,10 @@ function SpendingPage() {
             sort={tableSort}
             onToggleSort={toggleSort}
             categoryList={categoryList}
-            knownCategories={knownCategories}
             excludedCategoryIds={excludedCategories}
+            bucketColorByCategory={bucketColorByCategory}
+            categoryOptionsByBucket={categoryOptionsByBucket}
+            bankRecords={bankRecords}
             onCategoryChange={handleCategoryChange}
           />
         </div>
@@ -827,6 +961,17 @@ function SpendingPage() {
 
       {settingsOpen && (
         <BucketsModal {...bucketsAndCategoriesProps} onClose={() => setSettingsOpen(false)} />
+      )}
+
+      {bankSettingsOpen && (
+        <BankSettingsModal
+          banks={bankRecords}
+          onClose={() => setBankSettingsOpen(false)}
+          onAddBank={handleAddBank}
+          onUpdateBank={handleUpdateBank}
+          onDeleteBank={handleDeleteBank}
+          onSetBankLogo={handleSetBankLogo}
+        />
       )}
 
       {uploadOpen && (

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveCategoryList,
   generateCategoryId,
+  getCategoryBucketColor,
   getCategoryColor,
   resolveCategoryInput,
   slugifyCategoryLabel,
@@ -113,5 +114,23 @@ describe("getCategoryColor", () => {
 
   it("is deterministic for custom categories", () => {
     expect(getCategoryColor("Dining")).toBe(getCategoryColor("Dining"));
+  });
+});
+
+describe("getCategoryBucketColor", () => {
+  it("uses the bucket color for categories that belong to a bucket", () => {
+    expect(
+      getCategoryBucketColor("groceries", [{ id: "groceries", bucketId: "bucket-2", excluded: false }], [
+        { id: "bucket-1", color: "#111111" },
+        { id: "bucket-2", color: "#222222" },
+      ]),
+    ).toBe("#222222");
+  });
+
+  it("falls back to the special section colors for unclassified and excluded categories", () => {
+    expect(getCategoryBucketColor("unclassified", [], [])).toBe("#dc2626");
+    expect(
+      getCategoryBucketColor("travel", [{ id: "travel", bucketId: null, excluded: true }], []),
+    ).toBe("#e11d48");
   });
 });

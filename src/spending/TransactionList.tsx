@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImportedTransaction } from "./lib/csvParser";
 import {
   RESERVED_CATEGORIES,
+  getCategoryColor,
   getCategoryLabel,
-  resolveCategoryInput,
   type Category,
-  type KnownCategory,
 } from "./lib/categories";
+import { buildBankLogoMap, normalizeBankName, type BankRecord } from "./lib/banks";
 import { currencyFormatter } from "./lib/format";
 import MultiSelectFilter from "./MultiSelectFilter";
 
@@ -38,10 +38,15 @@ type TransactionListProps = {
   onToggleSort: (key: SortKey) => void;
   // Suggestions for the per-row category input.
   categoryList: string[];
-  knownCategories: KnownCategory[];
   // Category ids sitting in the Exclude bucket; they start unchecked in the Category filter so
   // excluded spending is hidden by default (the user can re-check them to bring it back).
   excludedCategoryIds: Set<string>;
+  bucketColorByCategory: Record<string, string>;
+  categoryOptionsByBucket: {
+    bucketLabel: string;
+    options: { value: string; label: string }[];
+  }[];
+  bankRecords: BankRecord[];
   onCategoryChange: (transactionId: string, category: Category) => void;
 };
 
@@ -60,8 +65,10 @@ function TransactionList({
   sort,
   onToggleSort,
   categoryList,
-  knownCategories,
   excludedCategoryIds,
+  bucketColorByCategory,
+  categoryOptionsByBucket,
+  bankRecords,
   onCategoryChange,
 }: TransactionListProps) {
   const [search, setSearch] = useState("");
@@ -107,6 +114,7 @@ function TransactionList({
   }, [transactions]);
 
   const hasLocalFilter = query !== "" || excludedBanks.size > 0 || excludedCategories.size > 0;
+  const bankLogoByName = useMemo(() => buildBankLogoMap(bankRecords), [bankRecords]);
 
   // Description search + bank/category filters, applied locally on top of the shell's filter/sort.
   const visibleTransactions = useMemo(() => {
@@ -202,7 +210,13 @@ function TransactionList({
                       <th
                         key={column.key}
                         aria-sort={ariaSort}
-                        className={column.key === "amount" ? "import-shell__cell--amount" : undefined}
+                        className={
+                          column.key === "amount"
+                            ? "import-shell__cell--amount"
+                            : column.key === "category"
+                              ? "import-shell__cell--category"
+                              : undefined
+                        }
                       >
                         <button
                           type="button"
@@ -220,39 +234,85 @@ function TransactionList({
                 </tr>
               </thead>
               <tbody>
-                {visibleTransactions.map((transaction) => (
-                  <tr key={transaction.id}>
-                    <td>{transaction.date}</td>
-                    <td>{transaction.description}</td>
-                    <td>{transaction.sourceBank}</td>
-                    <td>
-                      <input
-                        key={transaction.category}
-                        list="category-suggestions"
-                        className={`import-shell__category-input ${
-                          transaction.category === "unclassified"
-                            ? "import-shell__category-input--unclassified"
-                            : ""
-                        }`}
-                        defaultValue={getCategoryLabel(transaction.category)}
-                        onBlur={(event) => {
-                          const nextCategory = resolveCategoryInput(event.target.value, knownCategories);
-                          if (nextCategory !== transaction.category) {
-                            onCategoryChange(transaction.id, nextCategory);
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.currentTarget.blur();
-                          }
-                        }}
-                      />
-                    </td>
-                    <td className="import-shell__cell--amount">
-                      {currencyFormatter.format(transaction.amount)}
-                    </td>
-                  </tr>
-                ))}
+                {visibleTransactions.map((transaction) => {
+                  const categoryColor =
+                    bucketColorByCategory[transaction.category] ?? getCategoryColor(transaction.category);
+                  const selectedCategoryLabel = getCategoryLabel(transaction.category);
+                  const categoryWidth = Math.max(70, selectedCategoryLabel.length * 9 + 24);
+
+                  return (
+                    <tr key={transaction.id}>
+                      <td>{transaction.date}</td>
+                      <td>{transaction.description}</td>
+                      <td>
+                        {(() => {
+                          const bankLogo = bankLogoByName[normalizeBankName(transaction.sourceBank)];
+                          return bankLogo ? (
+                            <div className="import-shell__bank-badge" title={transaction.sourceBank}>
+                              <img
+                                src={bankLogo}
+                                alt={`${transaction.sourceBank} logo`}
+                                className="import-shell__bank-logo"
+                              />
+                            </div>
+                          ) : (
+                            <span className="import-shell__bank-name">{transaction.sourceBank}</span>
+                          );
+                        })()}
+                      </td>
+                      <td className="import-shell__cell--category-value">
+                        <select
+                          key={transaction.category}
+                          className={`import-shell__category-select ${
+                            transaction.category === "unclassified"
+                              ? "import-shell__category-select--unclassified"
+                              : ""
+                          }`}
+                          value={transaction.category}
+                          style={{
+                            width: `${categoryWidth}px`,
+                            background: `color-mix(in srgb, ${categoryColor} 18%, white)`,
+                            borderColor: categoryColor,
+                            color: "#1f2937",
+                            fontWeight: 400,
+                            fontSize: "0.85rem",
+                            lineHeight: 1.2,
+                            borderRadius: 999,
+                            minHeight: "30px",
+                            padding: "0.45rem 0.7rem",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            textAlign: "center",
+                            WebkitAppearance: "none",
+                            appearance: "none",
+                            backgroundImage: "none",
+                            textTransform: "none",
+                          }}
+                          onChange={(event) => {
+                            const nextCategory = event.target.value;
+                            if (nextCategory !== transaction.category) {
+                              onCategoryChange(transaction.id, nextCategory as Category);
+                            }
+                          }}
+                        >
+                          {categoryOptionsByBucket.map((group) => (
+                            <optgroup key={group.bucketLabel} label={group.bucketLabel}>
+                              {group.options.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="import-shell__cell--amount">
+                        {currencyFormatter.format(transaction.amount)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="import-shell__table-total-row">

@@ -602,6 +602,30 @@
   color: #4f46e5;
 }
 
+.import-shell__bank-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 34px;
+  padding: 0 0.8rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #374151;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.import-shell__bank-button:hover,
+.import-shell__bank-button:focus-visible {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
 .import-shell__chart-grid {
   display: grid;
   grid-template-columns: var(--chart-gutter) 1fr;
@@ -1158,6 +1182,31 @@
   background: white;
 }
 
+.import-shell__bank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.import-shell__bank-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.import-shell__bank-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #374151;
+}
+
 .import-shell__table {
   width: 100%;
   border-collapse: collapse;
@@ -1214,8 +1263,29 @@
   text-align: right;
 }
 
+.import-shell__table th.import-shell__cell--category,
+.import-shell__table td.import-shell__cell--category-value {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.import-shell__table td.import-shell__cell--category-value {
+  text-align: center;
+}
+
+.import-shell__table td.import-shell__cell--category-value > * {
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .import-shell__cell--amount .import-shell__sort-button {
   justify-content: flex-end;
+}
+
+.import-shell__cell--category .import-shell__sort-button {
+  justify-content: center;
+  text-align: center;
 }
 
 /* Bold total row pinned to the bottom of the transactions table. */
@@ -1235,12 +1305,22 @@
 }
 
 .import-shell__category-select {
+  display: inline-block;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin-left: auto;
+  margin-right: auto;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 0.35rem 0.5rem;
+  border-radius: 999px;
+  padding: 0.35rem 0;
   background: #f8fafc;
   color: #111827;
   font-size: 0.85rem;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -1249,6 +1329,144 @@
   background: #fffbeb;
   color: #92400e;
   font-weight: 600;
+}
+
+.bank-settings {
+  width: min(32rem, 80vw);
+}
+
+.bank-settings__header {
+  margin-bottom: 1rem;
+}
+
+.bank-settings__header h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.1rem;
+}
+
+.bank-settings__header p {
+  margin: 0;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.bank-settings__form {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.bank-settings__form input,
+.bank-settings__name-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: white;
+  color: #111827;
+  font: inherit;
+}
+
+.bank-settings__primary-button,
+.bank-settings__remove-button {
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #374151;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bank-settings__primary-button {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: white;
+}
+
+.bank-settings__primary-button:hover,
+.bank-settings__remove-button:hover {
+  filter: brightness(0.98);
+}
+
+.bank-settings__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.bank-settings__empty {
+  margin: 0;
+  color: #6b7280;
+}
+
+.bank-settings__row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.bank-settings__badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 6rem;
+}
+
+.bank-settings__logo,
+.bank-settings__logo-placeholder {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.55rem;
+  object-fit: contain;
+}
+
+.bank-settings__logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e2e8f0;
+  color: #374151;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.bank-settings__upload-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: white;
+  color: #374151;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bank-settings__upload-label input {
+  display: none;
+}
+
+.bank-settings__name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.bank-settings__remove-button {
+  flex-shrink: 0;
 }
 
 .import-shell__category-input {

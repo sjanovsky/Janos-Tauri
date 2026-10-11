@@ -9,7 +9,7 @@ const DEFAULT_CATEGORIES: [(&str, &str, &str); 5] = [
 ];
 
 /// Create and migrate the tables owned by the spending feature (uploads, transactions,
-/// categories, buckets). Called from `crate::db::init_db`, which owns connection-level
+/// categories, buckets, banks). Called from `crate::db::init_db`, which owns connection-level
 /// setup such as `PRAGMA foreign_keys`.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
@@ -44,6 +44,11 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
              name TEXT NOT NULL,
              color TEXT NOT NULL DEFAULT '#4f46e5',
              position INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE TABLE IF NOT EXISTS banks (
+             id TEXT PRIMARY KEY,
+             name TEXT NOT NULL,
+             logo_data_url TEXT
          );",
     )?;
 
@@ -95,6 +100,16 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     )?;
     if has_bucket_id == 0 {
         conn.execute("ALTER TABLE categories ADD COLUMN bucket_id TEXT", [])?;
+    }
+
+    // Migrate databases created before banks could carry their logo data URLs.
+    let has_bank_logo_data_url: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('banks') WHERE name = 'logo_data_url'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_bank_logo_data_url == 0 {
+        conn.execute("ALTER TABLE banks ADD COLUMN logo_data_url TEXT", [])?;
     }
 
     // Migrate databases created before categories could be ordered within a bucket. Existing

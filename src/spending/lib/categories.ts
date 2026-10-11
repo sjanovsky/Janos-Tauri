@@ -142,6 +142,28 @@ export function getCategoryColor(category: string): string {
   return EXTRA_COLOR_PALETTE[index];
 }
 
+export function getCategoryBucketColor(
+  category: string,
+  categoryRecords: Pick<CategoryRecord, "id" | "bucketId" | "excluded">[] = [],
+  buckets: Pick<BucketRecord, "id" | "color">[] = [],
+): string {
+  if (category === UNCLASSIFIED_CATEGORY) {
+    return UNCLASSIFIED_BUCKET_COLOR;
+  }
+
+  const record = categoryRecords.find((entry) => entry.id === category);
+  if (record?.excluded) {
+    return EXCLUDE_BUCKET_COLOR;
+  }
+
+  const bucketId = record?.bucketId ?? null;
+  if (!bucketId) {
+    return UNGROUPED_BUCKET_COLOR;
+  }
+
+  return buckets.find((bucket) => bucket.id === bucketId)?.color ?? UNGROUPED_BUCKET_COLOR;
+}
+
 export function slugifyCategoryLabel(label: string): string {
   const slug = label
     .trim()

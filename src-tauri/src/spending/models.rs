@@ -43,3 +43,11 @@ pub struct BucketRecord {
     pub color: String,
     pub position: i64,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BankRecord {
+    pub id: String,
+    pub name: String,
+    pub logo_data_url: Option<String>,
+}

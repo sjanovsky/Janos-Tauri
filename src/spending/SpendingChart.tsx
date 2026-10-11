@@ -95,6 +95,7 @@ type SpendingChartProps = {
   onToggleBucketFilter: (bucketId: string) => void;
   onOpenUpload: () => void;
   onOpenSettings: () => void;
+  onOpenBankSettings: () => void;
 };
 
 // The "Spending by {range}" card: a diverging stacked-bar chart with a per-bucket (or
@@ -120,6 +121,7 @@ function SpendingChart({
   onToggleBucketFilter,
   onOpenUpload,
   onOpenSettings,
+  onOpenBankSettings,
 }: SpendingChartProps) {
   const [tooltipAnchor, setTooltipAnchor] = useState<TooltipAnchor | null>(null);
 
@@ -152,6 +154,22 @@ function SpendingChart({
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
               Upload
+            </button>
+
+            <button
+              type="button"
+              className="import-shell__bank-button"
+              aria-label="Open bank settings"
+              title="Bank logos"
+              onClick={onOpenBankSettings}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="M3 10h18" />
+                <path d="M7 15h2" />
+                <path d="M15 15h2" />
+              </svg>
+              Banks
             </button>
 
             <button
