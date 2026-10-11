@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImportedTransaction } from "./lib/csvParser";
 import {
   RESERVED_CATEGORIES,
@@ -39,6 +39,9 @@ type TransactionListProps = {
   // Suggestions for the per-row category input.
   categoryList: string[];
   knownCategories: KnownCategory[];
+  // Category ids sitting in the Exclude bucket; they start unchecked in the Category filter so
+  // excluded spending is hidden by default (the user can re-check them to bring it back).
+  excludedCategoryIds: Set<string>;
   onCategoryChange: (transactionId: string, category: Category) => void;
 };
 
@@ -58,6 +61,7 @@ function TransactionList({
   onToggleSort,
   categoryList,
   knownCategories,
+  excludedCategoryIds,
   onCategoryChange,
 }: TransactionListProps) {
   const [search, setSearch] = useState("");
@@ -65,6 +69,27 @@ function TransactionList({
   const [excludedBanks, setExcludedBanks] = useState<Set<string>>(new Set());
   const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
   const query = search.trim().toLowerCase();
+
+  // Keep the Category filter's unchecked set in sync with the Exclude bucket: uncheck a category
+  // when it joins the bucket, re-check it when it leaves. We diff against the ids we last applied
+  // (not the live checked state) so the user's own manual toggles are left untouched. This runs via
+  // an effect rather than initial state because the categories load asynchronously, so the Exclude
+  // bucket is usually empty on first render.
+  const appliedExclusionsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const applied = appliedExclusionsRef.current;
+    const added = [...excludedCategoryIds].filter((id) => !applied.has(id));
+    const removed = [...applied].filter((id) => !excludedCategoryIds.has(id));
+    if (added.length > 0 || removed.length > 0) {
+      setExcludedCategories((current) => {
+        const next = new Set(current);
+        added.forEach((id) => next.add(id));
+        removed.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+    appliedExclusionsRef.current = new Set(excludedCategoryIds);
+  }, [excludedCategoryIds]);
 
   // Dropdown options come from the transactions actually in view (deduped + sorted by label).
   const bankOptions = useMemo(() => {

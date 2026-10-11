@@ -819,6 +819,7 @@ function SpendingPage() {
             onToggleSort={toggleSort}
             categoryList={categoryList}
             knownCategories={knownCategories}
+            excludedCategoryIds={excludedCategories}
             onCategoryChange={handleCategoryChange}
           />
         </div>
