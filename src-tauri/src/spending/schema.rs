@@ -36,12 +36,14 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
              label TEXT NOT NULL,
              color TEXT NOT NULL,
              excluded INTEGER NOT NULL DEFAULT 0,
-             bucket_id TEXT
+             bucket_id TEXT,
+             position INTEGER NOT NULL DEFAULT 0
          );
          CREATE TABLE IF NOT EXISTS buckets (
              id TEXT PRIMARY KEY,
              name TEXT NOT NULL,
-             color TEXT NOT NULL DEFAULT '#4f46e5'
+             color TEXT NOT NULL DEFAULT '#4f46e5',
+             position INTEGER NOT NULL DEFAULT 0
          );",
     )?;
 
@@ -54,6 +56,20 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     if has_bucket_color == 0 {
         conn.execute(
             "ALTER TABLE buckets ADD COLUMN color TEXT NOT NULL DEFAULT '#4f46e5'",
+            [],
+        )?;
+    }
+
+    // Migrate databases created before buckets could be ordered. Existing rows default to 0, so
+    // they keep their prior (name) order until the user drags to reorder them.
+    let has_bucket_position: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('buckets') WHERE name = 'position'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_bucket_position == 0 {
+        conn.execute(
+            "ALTER TABLE buckets ADD COLUMN position INTEGER NOT NULL DEFAULT 0",
             [],
         )?;
     }
@@ -79,6 +95,21 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     )?;
     if has_bucket_id == 0 {
         conn.execute("ALTER TABLE categories ADD COLUMN bucket_id TEXT", [])?;
+    }
+
+    // Migrate databases created before categories could be ordered within a bucket. Existing
+    // rows default to position 0, so they keep their prior (label) order until the user drags
+    // to reorder a bucket.
+    let has_position: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('categories') WHERE name = 'position'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_position == 0 {
+        conn.execute(
+            "ALTER TABLE categories ADD COLUMN position INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
     }
 
     let category_count: i64 =

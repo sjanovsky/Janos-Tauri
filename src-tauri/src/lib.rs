@@ -91,8 +91,10 @@ pub fn run() {
             spending::list_categories,
             spending::upsert_category,
             spending::set_category_placement,
+            spending::set_category_positions,
             spending::list_buckets,
             spending::upsert_bucket,
+            spending::set_bucket_positions,
             spending::delete_bucket,
             spending::delete_category,
         ])

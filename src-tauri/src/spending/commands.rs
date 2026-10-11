@@ -142,7 +142,8 @@ pub fn list_categories(state: State<DbState>) -> Result<Vec<CategoryRecord>, Str
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, label, color, excluded, bucket_id FROM categories ORDER BY label COLLATE NOCASE",
+            "SELECT id, label, color, excluded, bucket_id, position FROM categories
+             ORDER BY position, label COLLATE NOCASE",
         )
         .map_err(|e| e.to_string())?;
 
@@ -154,6 +155,7 @@ pub fn list_categories(state: State<DbState>) -> Result<Vec<CategoryRecord>, Str
                 color: row.get(2)?,
                 excluded: row.get(3)?,
                 bucket_id: row.get(4)?,
+                position: row.get(5)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -204,10 +206,29 @@ pub fn set_category_placement(
 }
 
 #[tauri::command]
+pub fn set_category_positions(state: State<DbState>, ids: Vec<String>) -> Result<(), String> {
+    // Persist a bucket's ordering: each id's position becomes its index in `ids`. Positions only
+    // need to be ordered within a bucket, so the caller sends one bucket's members at a time.
+    let mut conn = state.0.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    {
+        let mut stmt = tx
+            .prepare("UPDATE categories SET position = ?1 WHERE id = ?2")
+            .map_err(|e| e.to_string())?;
+        for (index, id) in ids.iter().enumerate() {
+            stmt.execute(params![index as i64, id])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn list_buckets(state: State<DbState>) -> Result<Vec<BucketRecord>, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, name, color FROM buckets ORDER BY name COLLATE NOCASE")
+        .prepare("SELECT id, name, color, position FROM buckets ORDER BY position, name COLLATE NOCASE")
         .map_err(|e| e.to_string())?;
 
     let buckets: Vec<BucketRecord> = stmt
@@ -216,6 +237,7 @@ pub fn list_buckets(state: State<DbState>) -> Result<Vec<BucketRecord>, String> 
                 id: row.get(0)?,
                 name: row.get(1)?,
                 color: row.get(2)?,
+                position: row.get(3)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -233,12 +255,33 @@ pub fn upsert_bucket(
     color: String,
 ) -> Result<(), String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
+    // New buckets land at the end of the order (MAX + 1); a rename/recolor of an existing bucket
+    // leaves its position untouched.
     conn.execute(
-        "INSERT INTO buckets (id, name, color) VALUES (?1, ?2, ?3)
+        "INSERT INTO buckets (id, name, color, position)
+         VALUES (?1, ?2, ?3, COALESCE((SELECT MAX(position) + 1 FROM buckets), 0))
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color",
         params![id, name, color],
     )
     .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_bucket_positions(state: State<DbState>, ids: Vec<String>) -> Result<(), String> {
+    // Persist bucket order: each id's position becomes its index in `ids`.
+    let mut conn = state.0.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    {
+        let mut stmt = tx
+            .prepare("UPDATE buckets SET position = ?1 WHERE id = ?2")
+            .map_err(|e| e.to_string())?;
+        for (index, id) in ids.iter().enumerate() {
+            stmt.execute(params![index as i64, id])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
 

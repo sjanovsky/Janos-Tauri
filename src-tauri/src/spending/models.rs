@@ -32,6 +32,7 @@ pub struct CategoryRecord {
     pub color: String,
     pub excluded: bool,
     pub bucket_id: Option<String>,
+    pub position: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -40,4 +41,5 @@ pub struct BucketRecord {
     pub id: String,
     pub name: String,
     pub color: String,
+    pub position: i64,
 }

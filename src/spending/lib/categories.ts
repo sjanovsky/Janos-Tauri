@@ -6,12 +6,17 @@ export type CategoryRecord = {
   color: string;
   excluded: boolean;
   bucketId: string | null;
+  // Order within the category's bucket (ascending). Only meaningful relative to other members of
+  // the same bucket; migrated rows default to 0 so they fall back to label order.
+  position: number;
 };
 
 export type BucketRecord = {
   id: string;
   name: string;
   color: string;
+  // Order of the bucket among all buckets (ascending); migrated rows default to 0 (name order).
+  position: number;
 };
 
 // Id used for the catch-all section of categories that don't belong to a bucket.

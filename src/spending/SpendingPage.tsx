@@ -161,7 +161,7 @@ function SpendingPage() {
   const bucketMeta = useMemo<BucketMeta[]>(() => {
     const metas: BucketMeta[] = buckets
       .slice()
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
       .map((bucket) => ({ id: bucket.id, name: bucket.name, color: bucket.color }));
     metas.push({ id: UNGROUPED_BUCKET_ID, name: "Ungrouped", color: UNGROUPED_BUCKET_COLOR });
     // Unclassified is its own catch-all section (below the real buckets and Ungrouped), shown
@@ -287,8 +287,18 @@ function SpendingPage() {
         (totals, row) => totals.map((value, index) => value + row.perColumn[index]),
         new Array<number>(columnCount).fill(0),
       );
-    const byLabel = (a: { category: string }, b: { category: string }) =>
-      getCategoryLabel(a.category).localeCompare(getCategoryLabel(b.category));
+    // Order categories within a bucket by the position the user set (dragging them in the
+    // Buckets & categories manager), falling back to label for ties and for categories with no
+    // managed record (e.g. Ungrouped/Unclassified entries).
+    const positionByCategory = new Map(categoryRecords.map((record) => [record.id, record.position]));
+    const byOrder = (a: { category: string }, b: { category: string }) => {
+      const positionDelta =
+        (positionByCategory.get(a.category) ?? Number.MAX_SAFE_INTEGER) -
+        (positionByCategory.get(b.category) ?? Number.MAX_SAFE_INTEGER);
+      return positionDelta !== 0
+        ? positionDelta
+        : getCategoryLabel(a.category).localeCompare(getCategoryLabel(b.category));
+    };
 
     // Group active categories under their display bucket (real bucket, or "Ungrouped").
     const grouped = new Map<string, { category: string; perColumn: number[] }[]>();
@@ -306,7 +316,7 @@ function SpendingPage() {
       if (!members || members.length === 0) {
         return;
       }
-      const sorted = members.slice().sort(byLabel);
+      const sorted = members.slice().sort(byOrder);
 
       // Collapse a bucket that holds a single category whose name matches the bucket's into just
       // the bucket-total row, instead of showing a redundant category line and an identical total.
@@ -344,7 +354,15 @@ function SpendingPage() {
     );
 
     return { displayRows, netPerColumn };
-  }, [categoryList, selectedCategories, excludedCategories, chartSeries, bucketMeta, resolveDisplayBucketId]);
+  }, [
+    categoryList,
+    selectedCategories,
+    excludedCategories,
+    chartSeries,
+    bucketMeta,
+    resolveDisplayBucketId,
+    categoryRecords,
+  ]);
 
   // In bank mode the totals section lists one bold row per bank (no category line items).
   const bankTotals = useMemo(() => {
@@ -564,7 +582,10 @@ function SpendingPage() {
   const handleAddCategory = (label: string, color: string) => {
     const previousRecords = categoryRecords;
     const id = generateCategoryId(label, categoryRecords.map((record) => record.id));
-    setCategoryRecords((current) => [...current, { id, label, color, excluded: false, bucketId: null }]);
+    setCategoryRecords((current) => [
+      ...current,
+      { id, label, color, excluded: false, bucketId: null, position: 0 },
+    ]);
 
     invoke("upsert_category", { id, label, color }).catch((error) => {
       console.error("Failed to save the new category to the database", error);
@@ -579,7 +600,7 @@ function SpendingPage() {
       const exists = current.some((record) => record.id === id);
       return exists
         ? current.map((record) => (record.id === id ? { ...record, label, color } : record))
-        : [...current, { id, label, color, excluded: false, bucketId: null }];
+        : [...current, { id, label, color, excluded: false, bucketId: null, position: 0 }];
     });
 
     invoke("upsert_category", { id, label, color }).catch((error) => {
@@ -616,7 +637,9 @@ function SpendingPage() {
     const previousBuckets = buckets;
     const id = crypto.randomUUID();
     const color = nextBucketColor(buckets.length);
-    setBuckets((current) => [...current, { id, name, color }]);
+    // New buckets land at the end of the order, matching upsert_bucket's MAX + 1 on the DB side.
+    const position = buckets.reduce((max, bucket) => Math.max(max, bucket.position), -1) + 1;
+    setBuckets((current) => [...current, { id, name, color, position }]);
 
     invoke("upsert_bucket", { id, name, color }).catch((error) => {
       console.error("Failed to save the new bucket to the database", error);
@@ -669,26 +692,66 @@ function SpendingPage() {
     });
   };
 
+  // Reorder the buckets to the given id order (dragged in the manager); drives the section order
+  // in the Spending by Month table and the stacked bars.
+  const handleReorderBuckets = (orderedIds: string[]) => {
+    const previousBuckets = buckets;
+    const positionById = new Map(orderedIds.map((id, index) => [id, index]));
+    setBuckets((current) =>
+      current.map((bucket) =>
+        positionById.has(bucket.id) ? { ...bucket, position: positionById.get(bucket.id)! } : bucket,
+      ),
+    );
+
+    invoke("set_bucket_positions", { ids: orderedIds }).catch((error) => {
+      console.error("Failed to save the bucket order to the database", error);
+      setDbError("Couldn't save that bucket order to the database.");
+      setBuckets(previousBuckets);
+    });
+  };
+
   // A category lives in one place: a bucket, the Ungrouped tray (bucketId null), or the
   // Exclude tray (excluded true, left out of the spending chart/totals). Bucket and excluded
-  // are mutually exclusive, so both are written together.
-  const handlePlaceCategory = (categoryId: string, bucketId: string | null, excluded: boolean) => {
+  // are mutually exclusive, so both are written together. When dropping into a bucket the caller
+  // also passes `orderedBucketIds` — that bucket's full member order after the move — which sets
+  // each member's position (the order shown in the Spending by Month table).
+  const handlePlaceCategory = (
+    categoryId: string,
+    bucketId: string | null,
+    excluded: boolean,
+    orderedBucketIds?: string[],
+  ) => {
     const previousRecords = categoryRecords;
     const existing = categoryRecords.find((record) => record.id === categoryId);
     const label = existing?.label ?? getCategoryLabel(categoryId);
     const color = existing?.color ?? getCategoryColor(categoryId);
+    const positionById = orderedBucketIds
+      ? new Map(orderedBucketIds.map((id, index) => [id, index]))
+      : null;
 
-    setCategoryRecords((current) =>
-      current.some((record) => record.id === categoryId)
+    setCategoryRecords((current) => {
+      const withMoved = current.some((record) => record.id === categoryId)
         ? current.map((record) => (record.id === categoryId ? { ...record, bucketId, excluded } : record))
-        : [...current, { id: categoryId, label, color, excluded, bucketId }],
-    );
-
-    invoke("set_category_placement", { id: categoryId, label, color, excluded, bucketId }).catch((error) => {
-      console.error("Failed to save the category placement to the database", error);
-      setDbError("Couldn't save that category change to the database.");
-      setCategoryRecords(previousRecords);
+        : [
+            ...current,
+            { id: categoryId, label, color, excluded, bucketId, position: positionById?.get(categoryId) ?? 0 },
+          ];
+      return positionById
+        ? withMoved.map((record) =>
+            positionById.has(record.id) ? { ...record, position: positionById.get(record.id)! } : record,
+          )
+        : withMoved;
     });
+
+    // Persist the placement first (it creates the row for a transaction-only category), then the
+    // positions, so the reorder update always lands on an existing row.
+    invoke("set_category_placement", { id: categoryId, label, color, excluded, bucketId })
+      .then(() => (orderedBucketIds ? invoke("set_category_positions", { ids: orderedBucketIds }) : undefined))
+      .catch((error) => {
+        console.error("Failed to save the category placement to the database", error);
+        setDbError("Couldn't save that category change to the database.");
+        setCategoryRecords(previousRecords);
+      });
   };
 
   // Shared by the Uploads-page panel and the Spending-page settings modal.
@@ -702,6 +765,7 @@ function SpendingPage() {
     onRenameBucket: handleRenameBucket,
     onSetBucketColor: handleSetBucketColor,
     onDeleteBucket: handleDeleteBucket,
+    onReorderBuckets: handleReorderBuckets,
     onPlaceCategory: handlePlaceCategory,
   };
 

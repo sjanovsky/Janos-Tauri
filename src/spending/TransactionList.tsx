@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import type { ImportedTransaction } from "./lib/csvParser";
 import {
   RESERVED_CATEGORIES,
@@ -7,6 +8,7 @@ import {
   type KnownCategory,
 } from "./lib/categories";
 import { currencyFormatter } from "./lib/format";
+import MultiSelectFilter from "./MultiSelectFilter";
 
 export type SortKey = "date" | "description" | "bank" | "amount" | "category";
 export type SortDirection = "asc" | "desc";
@@ -58,6 +60,57 @@ function TransactionList({
   knownCategories,
   onCategoryChange,
 }: TransactionListProps) {
+  const [search, setSearch] = useState("");
+  // Unchecked values per filter; empty set means that field isn't narrowing anything.
+  const [excludedBanks, setExcludedBanks] = useState<Set<string>>(new Set());
+  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
+  const query = search.trim().toLowerCase();
+
+  // Dropdown options come from the transactions actually in view (deduped + sorted by label).
+  const bankOptions = useMemo(() => {
+    const banks = Array.from(new Set(transactions.map((transaction) => transaction.sourceBank)));
+    return banks
+      .sort((a, b) => a.localeCompare(b))
+      .map((bank) => ({ value: bank, label: bank }));
+  }, [transactions]);
+
+  const categoryOptions = useMemo(() => {
+    const categories = Array.from(new Set(transactions.map((transaction) => transaction.category)));
+    return categories
+      .map((category) => ({ value: category, label: getCategoryLabel(category) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [transactions]);
+
+  const hasLocalFilter = query !== "" || excludedBanks.size > 0 || excludedCategories.size > 0;
+
+  // Description search + bank/category filters, applied locally on top of the shell's filter/sort.
+  const visibleTransactions = useMemo(() => {
+    if (!hasLocalFilter) {
+      return transactions;
+    }
+    return transactions.filter((transaction) => {
+      if (query && !transaction.description.toLowerCase().includes(query)) {
+        return false;
+      }
+      if (excludedBanks.has(transaction.sourceBank)) {
+        return false;
+      }
+      if (excludedCategories.has(transaction.category)) {
+        return false;
+      }
+      return true;
+    });
+  }, [transactions, query, excludedBanks, excludedCategories, hasLocalFilter]);
+
+  // Keep the footer total in sync with the rows actually shown after filtering.
+  const visibleTotal = useMemo(
+    () =>
+      hasLocalFilter
+        ? visibleTransactions.reduce((sum, transaction) => sum + transaction.amount, 0)
+        : total,
+    [hasLocalFilter, visibleTransactions, total],
+  );
+
   return (
     <>
       <div className="import-shell__master-right">
@@ -76,12 +129,38 @@ function TransactionList({
           </div>
         )}
 
+        {hasAnyTransactions && (
+          <div className="import-shell__table-tools">
+            <input
+              type="search"
+              className="import-shell__table-search-input"
+              placeholder="Search descriptions…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <MultiSelectFilter
+              label="Bank"
+              options={bankOptions}
+              excluded={excludedBanks}
+              onChange={setExcludedBanks}
+            />
+            <MultiSelectFilter
+              label="Category"
+              options={categoryOptions}
+              excluded={excludedCategories}
+              onChange={setExcludedCategories}
+            />
+          </div>
+        )}
+
         <div className="import-shell__table-shell">
-          {transactions.length === 0 ? (
+          {visibleTransactions.length === 0 ? (
             <div className="import-shell__empty">
               {!hasAnyTransactions
                 ? "No transactions have been imported yet."
-                : "No transactions match this filter."}
+                : hasLocalFilter
+                  ? "No transactions match your search or filters."
+                  : "No transactions match this filter."}
             </div>
           ) : (
             <table className="import-shell__table">
@@ -116,7 +195,7 @@ function TransactionList({
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((transaction) => (
+                {visibleTransactions.map((transaction) => (
                   <tr key={transaction.id}>
                     <td>{transaction.date}</td>
                     <td>{transaction.description}</td>
@@ -153,7 +232,7 @@ function TransactionList({
               <tfoot>
                 <tr className="import-shell__table-total-row">
                   <td colSpan={SORT_COLUMNS.length - 1}>Total</td>
-                  <td className="import-shell__cell--amount">{currencyFormatter.format(total)}</td>
+                  <td className="import-shell__cell--amount">{currencyFormatter.format(visibleTotal)}</td>
                 </tr>
               </tfoot>
             </table>

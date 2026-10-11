@@ -18,13 +18,23 @@ type BucketsAndCategoriesProps = {
   onRenameBucket: (id: string, name: string) => void;
   onSetBucketColor: (id: string, color: string) => void;
   onDeleteBucket: (id: string) => void;
+  // Reorder all buckets to the given id order (dragged by their handles).
+  onReorderBuckets: (orderedIds: string[]) => void;
   // Move a category into a bucket (bucketId), the Ungrouped tray (null), or the Exclude
-  // tray (excluded = true). Bucket and excluded are mutually exclusive placements.
-  onPlaceCategory: (categoryId: string, bucketId: string | null, excluded: boolean) => void;
+  // tray (excluded = true). Bucket and excluded are mutually exclusive placements. When placing
+  // into a bucket, `orderedBucketIds` is that bucket's full member order after the move, which
+  // sets each category's position (the order shown in the Spending by Month table).
+  onPlaceCategory: (
+    categoryId: string,
+    bucketId: string | null,
+    excluded: boolean,
+    orderedBucketIds?: string[],
+  ) => void;
 };
 
 const NEW_CATEGORY_DEFAULT_COLOR = "#4f46e5";
 const CATEGORY_DRAG_TYPE = "application/x-janos-category";
+const BUCKET_DRAG_TYPE = "application/x-janos-bucket";
 
 function TrashIcon() {
   return (
@@ -85,7 +95,36 @@ function CloseIcon() {
   );
 }
 
+function GripIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
+      <circle cx="9" cy="5" r="1.6" />
+      <circle cx="15" cy="5" r="1.6" />
+      <circle cx="9" cy="12" r="1.6" />
+      <circle cx="15" cy="12" r="1.6" />
+      <circle cx="9" cy="19" r="1.6" />
+      <circle cx="15" cy="19" r="1.6" />
+    </svg>
+  );
+}
+
+// Grow a bucket-name textarea to fit its (possibly wrapped) content so long names aren't clipped.
+function autoGrowTextarea(el: HTMLTextAreaElement) {
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 const byLabel = (a: CategoryRecord, b: CategoryRecord) => a.label.localeCompare(b.label);
+
+// Buckets render in the order the user set by dragging (position), with name as a stable
+// tie-breaker for migrated rows that all share position 0.
+const byBucketPosition = (a: BucketRecord, b: BucketRecord) =>
+  a.position - b.position || a.name.localeCompare(b.name);
+
+// Bucket members render in the order the user set by dragging (position), with label as a stable
+// tie-breaker for migrated rows that all share position 0.
+const byPosition = (a: CategoryRecord, b: CategoryRecord) =>
+  a.position - b.position || a.label.localeCompare(b.label);
 
 function BucketsAndCategories({
   categories,
@@ -97,6 +136,7 @@ function BucketsAndCategories({
   onRenameBucket,
   onSetBucketColor,
   onDeleteBucket,
+  onReorderBuckets,
   onPlaceCategory,
 }: BucketsAndCategoriesProps) {
   const [newLabel, setNewLabel] = useState("");
@@ -104,6 +144,13 @@ function BucketsAndCategories({
   const [newBucket, setNewBucket] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  // Live preview of a bucket's member order while a pill is dragged over it: the other pills
+  // reflow to this order (opening a gap) so the drop's result is visible before releasing.
+  const [dragPreview, setDragPreview] = useState<{ bucketId: string; orderedIds: string[] } | null>(null);
+  // The same, one level up: which bucket is being dragged by its handle, and the live preview of
+  // the whole-bucket order while it's dragged over the others.
+  const [draggingBucketId, setDraggingBucketId] = useState<string | null>(null);
+  const [bucketDragPreview, setBucketDragPreview] = useState<string[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -131,6 +178,94 @@ function BucketsAndCategories({
       ungrouped.push(category);
     }
   });
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+
+  // A bucket's member ids in saved (position) order.
+  const sortedBucketIds = (bucketId: string) =>
+    (categoriesByBucket.get(bucketId) ?? [])
+      .slice()
+      .sort(byPosition)
+      .map((category) => category.id);
+
+  // Insert `draggedId` into `bucketId`'s order at `beforeId` (null = end). `after` nudges past the
+  // reference pill, so dropping on a pill's right half lands after it (and lets you reach the end).
+  const orderWithInsertion = (
+    bucketId: string,
+    draggedId: string,
+    beforeId: string | null,
+    after = false,
+  ) => {
+    const without = sortedBucketIds(bucketId).filter((id) => id !== draggedId);
+    if (!beforeId) {
+      return [...without, draggedId];
+    }
+    const base = without.indexOf(beforeId);
+    const index = base === -1 ? without.length : after ? base + 1 : base;
+    return [...without.slice(0, index), draggedId, ...without.slice(index)];
+  };
+
+  const sameOrder = (a: string[], b: string[]) =>
+    a.length === b.length && a.every((value, index) => value === b[index]);
+
+  // The members to render for a bucket: its preview order when it's the active drop target, or its
+  // members with the dragged pill removed when that pill is being dragged into a different bucket.
+  const displayMembers = (bucketId: string): CategoryRecord[] => {
+    const base = (categoriesByBucket.get(bucketId) ?? []).slice().sort(byPosition);
+    if (!draggingId) {
+      return base;
+    }
+    if (dragPreview && dragPreview.bucketId === bucketId) {
+      return dragPreview.orderedIds
+        .map((id) => categoryById.get(id))
+        .filter((category): category is CategoryRecord => Boolean(category));
+    }
+    if (dragPreview && base.some((category) => category.id === draggingId)) {
+      return base.filter((category) => category.id !== draggingId);
+    }
+    return base;
+  };
+
+  // --- Whole-bucket reordering (dragging a bucket by its handle) ---
+
+  const baseBucketOrder = () => buckets.slice().sort(byBucketPosition).map((bucket) => bucket.id);
+
+  const bucketOrderWithInsertion = (draggedId: string, beforeId: string, after: boolean) => {
+    const without = baseBucketOrder().filter((id) => id !== draggedId);
+    const base = without.indexOf(beforeId);
+    const index = base === -1 ? without.length : after ? base + 1 : base;
+    return [...without.slice(0, index), draggedId, ...without.slice(index)];
+  };
+
+  // Buckets to render, in preview order while one is being dragged.
+  const displayBuckets = (): BucketRecord[] => {
+    const base = buckets.slice().sort(byBucketPosition);
+    if (!draggingBucketId || !bucketDragPreview) {
+      return base;
+    }
+    const byId = new Map(base.map((bucket) => [bucket.id, bucket]));
+    return bucketDragPreview
+      .map((id) => byId.get(id))
+      .filter((bucket): bucket is BucketRecord => Boolean(bucket));
+  };
+
+  const isBucketDrag = (event: DragEvent<HTMLDivElement>) =>
+    event.dataTransfer.types.includes(BUCKET_DRAG_TYPE) || draggingBucketId !== null;
+
+  const clearBucketDrag = () => {
+    setDraggingBucketId(null);
+    setBucketDragPreview(null);
+  };
+
+  const handleBucketDragStart = (event: DragEvent<HTMLSpanElement>, bucket: BucketRecord) => {
+    event.dataTransfer.setData(BUCKET_DRAG_TYPE, bucket.id);
+    event.dataTransfer.effectAllowed = "move";
+    // Drag the whole row, not just the grip.
+    const row = (event.currentTarget as HTMLElement).closest(".bucket-row");
+    if (row) {
+      event.dataTransfer.setDragImage(row, 24, 20);
+    }
+    setDraggingBucketId(bucket.id);
+  };
 
   const handleAddSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -171,15 +306,33 @@ function BucketsAndCategories({
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDragOverKey(key);
+    // Over a bucket's background (not a specific pill): preview an append, but keep a precise
+    // pill-based preview already set for this bucket. Trays aren't ordered, so clear the preview.
+    if (draggingId && bucketIds.has(key)) {
+      setDragPreview((current) =>
+        current && current.bucketId === key
+          ? current
+          : { bucketId: key, orderedIds: orderWithInsertion(key, draggingId, null) },
+      );
+    } else {
+      setDragPreview(null);
+    }
   };
 
   const handleRowDragLeave = (event: DragEvent<HTMLDivElement>, key: string) => {
-    // Drag events bubble from the pills inside the row, so only clear the highlight once
-    // the pointer actually leaves the row (not when it crosses onto a child).
+    // Drag events bubble from the pills inside the row, so only clear once the pointer actually
+    // leaves the row (not when it crosses onto a child).
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
       return;
     }
     setDragOverKey((current) => (current === key ? null : current));
+    setDragPreview((current) => (current && current.bucketId === key ? null : current));
+  };
+
+  const clearDragState = () => {
+    setDraggingId(null);
+    setDragOverKey(null);
+    setDragPreview(null);
   };
 
   const handleRowDrop = (
@@ -189,14 +342,92 @@ function BucketsAndCategories({
     event.preventDefault();
     const categoryId = event.dataTransfer.getData(CATEGORY_DRAG_TYPE) || draggingId;
     if (categoryId) {
-      onPlaceCategory(categoryId, target.bucketId, target.excluded);
+      if (target.bucketId && !target.excluded && bucketIds.has(target.bucketId)) {
+        // Commit the previewed order (the gap the user is looking at); fall back to append.
+        const order =
+          dragPreview && dragPreview.bucketId === target.bucketId
+            ? dragPreview.orderedIds
+            : orderWithInsertion(target.bucketId, categoryId, null);
+        onPlaceCategory(categoryId, target.bucketId, false, order);
+      } else {
+        // Trays (Ungrouped / Exclude) aren't ordered, so they take the plain placement.
+        onPlaceCategory(categoryId, target.bucketId, target.excluded);
+      }
     }
-    setDraggingId(null);
-    setDragOverKey(null);
+    clearDragState();
   };
 
-  const renderPill = (category: CategoryRecord, sectionColor: string) => {
+  // Hovering a specific pill sets a precise insertion point: before it, or after it when the
+  // pointer is past its horizontal midpoint. stopPropagation keeps the row from overriding it.
+  const handlePillDragOver = (
+    event: DragEvent<HTMLDivElement>,
+    bucketId: string,
+    category: CategoryRecord,
+  ) => {
+    const isCategoryDrag = event.dataTransfer.types.includes(CATEGORY_DRAG_TYPE) || draggingId !== null;
+    if (!isCategoryDrag) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverKey(bucketId);
+    if (!draggingId || category.id === draggingId) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const after = event.clientX > rect.left + rect.width / 2;
+    const orderedIds = orderWithInsertion(bucketId, draggingId, category.id, after);
+    setDragPreview((current) =>
+      current && current.bucketId === bucketId && sameOrder(current.orderedIds, orderedIds)
+        ? current
+        : { bucketId, orderedIds },
+    );
+  };
+
+  // A bucket row is a drop target for two kinds of drag: a bucket being reordered by its handle,
+  // or a category being dropped into the bucket. Dispatch on the drag type.
+  const handleBucketRowDragOver = (event: DragEvent<HTMLDivElement>, bucket: BucketRecord) => {
+    if (!isBucketDrag(event)) {
+      handleRowDragOver(event, bucket.id);
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (!draggingBucketId || bucket.id === draggingBucketId) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    const order = bucketOrderWithInsertion(draggingBucketId, bucket.id, after);
+    setBucketDragPreview((current) => (current && sameOrder(current, order) ? current : order));
+  };
+
+  const handleBucketRowDragLeave = (event: DragEvent<HTMLDivElement>, bucket: BucketRecord) => {
+    // The bucket-reorder preview intentionally persists across rows (cleared on drop/dragend);
+    // only the category highlight clears when leaving a row.
+    if (!isBucketDrag(event)) {
+      handleRowDragLeave(event, bucket.id);
+    }
+  };
+
+  const handleBucketRowDrop = (event: DragEvent<HTMLDivElement>, bucket: BucketRecord) => {
+    if (!isBucketDrag(event)) {
+      handleRowDrop(event, { bucketId: bucket.id, excluded: false });
+      return;
+    }
+    event.preventDefault();
+    if (draggingBucketId) {
+      onReorderBuckets(bucketDragPreview ?? baseBucketOrder());
+    }
+    clearBucketDrag();
+  };
+
+  // `bucketId` is the real bucket a pill belongs to; pills in a bucket are reorder drop targets,
+  // while tray pills (Ungrouped / Exclude) pass null and only the row handles drops.
+  const renderPill = (category: CategoryRecord, sectionColor: string, bucketId: string | null = null) => {
     const isEditing = editingId === category.id;
+    const isReorderable = bucketId !== null;
     return (
       <div
         key={category.id}
@@ -204,10 +435,21 @@ function BucketsAndCategories({
         style={{ "--cat": sectionColor } as CSSProperties}
         draggable={!isEditing}
         onDragStart={(event) => handlePillDragStart(event, category)}
-        onDragEnd={() => {
-          setDraggingId(null);
-          setDragOverKey(null);
-        }}
+        onDragEnd={clearDragState}
+        onDragOver={isReorderable ? (event) => handlePillDragOver(event, bucketId, category) : undefined}
+        onDrop={
+          isReorderable
+            ? (event) => {
+                // A bucket being reordered should fall through to the row; only a category drop
+                // is handled here (and stopped from also firing the row's append-to-end drop).
+                if (!draggingId) {
+                  return;
+                }
+                event.stopPropagation();
+                handleRowDrop(event, { bucketId, excluded: false });
+              }
+            : undefined
+        }
       >
         <span className="cat-pill__swatch" aria-hidden="true" />
 
@@ -268,18 +510,33 @@ function BucketsAndCategories({
       </div>
 
       <div className="bucket-board">
-        {buckets.map((bucket) => {
-          const members = (categoriesByBucket.get(bucket.id) ?? []).slice().sort(byLabel);
+        {displayBuckets().map((bucket) => {
+          const members = displayMembers(bucket.id);
           const isOver = dragOverKey === bucket.id;
+          const isDraggingThis = draggingBucketId === bucket.id;
           return (
             <div
               key={bucket.id}
-              className={`bucket-row ${isOver ? "bucket-row--drop" : ""}`}
-              onDragOver={(event) => handleRowDragOver(event, bucket.id)}
-              onDragLeave={(event) => handleRowDragLeave(event, bucket.id)}
-              onDrop={(event) => handleRowDrop(event, { bucketId: bucket.id, excluded: false })}
+              className={`bucket-row ${isOver ? "bucket-row--drop" : ""} ${
+                isDraggingThis ? "bucket-row--dragging" : ""
+              }`}
+              onDragOver={(event) => handleBucketRowDragOver(event, bucket)}
+              onDragLeave={(event) => handleBucketRowDragLeave(event, bucket)}
+              onDrop={(event) => handleBucketRowDrop(event, bucket)}
             >
               <div className="bucket-row__head">
+                <span
+                  className="bucket-row__grip"
+                  role="button"
+                  tabIndex={-1}
+                  draggable
+                  aria-label={`Reorder bucket ${bucket.name}`}
+                  title="Drag to reorder this bucket"
+                  onDragStart={(event) => handleBucketDragStart(event, bucket)}
+                  onDragEnd={clearBucketDrag}
+                >
+                  <GripIcon />
+                </span>
                 <input
                   type="color"
                   className="bucket-row__swatch"
@@ -287,22 +544,31 @@ function BucketsAndCategories({
                   aria-label={`Color for bucket ${bucket.name}`}
                   onChange={(event) => onSetBucketColor(bucket.id, event.target.value)}
                 />
-                <input
+                <textarea
                   key={bucket.name}
-                  type="text"
+                  rows={1}
                   className="bucket-row__name"
                   defaultValue={bucket.name}
                   aria-label={`Name for bucket ${bucket.name}`}
+                  ref={(el) => {
+                    if (el) {
+                      autoGrowTextarea(el);
+                    }
+                  }}
+                  onInput={(event) => autoGrowTextarea(event.currentTarget)}
                   onBlur={(event) => {
                     const trimmed = event.target.value.trim();
                     if (trimmed && trimmed !== bucket.name) {
                       onRenameBucket(bucket.id, trimmed);
                     } else {
                       event.target.value = bucket.name;
+                      autoGrowTextarea(event.target);
                     }
                   }}
                   onKeyDown={(event) => {
+                    // Enter saves (blur) instead of inserting a newline into the name.
                     if (event.key === "Enter") {
+                      event.preventDefault();
                       event.currentTarget.blur();
                     }
                   }}
@@ -321,7 +587,7 @@ function BucketsAndCategories({
                 {members.length === 0 ? (
                   <span className="bucket-row__empty">Drag categories here</span>
                 ) : (
-                  members.map((category) => renderPill(category, bucket.color))
+                  members.map((category) => renderPill(category, bucket.color, bucket.id))
                 )}
               </div>
             </div>
