@@ -251,6 +251,10 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1rem;
+  /* The dropzone and textarea are the only two cells, so they stretch to equal heights;
+     --intake-field-h is their shared minimum. The Preview button lives in its own row
+     below so it never inflates the textarea's cell. */
+  --intake-field-h: 150px;
 }
 
 .custom-import__dropzone {
@@ -258,6 +262,7 @@
   align-items: center;
   justify-content: center;
   text-align: center;
+  min-height: var(--intake-field-h);
   padding: 1.5rem 1rem;
   border: 1.5px dashed #c7d2fe;
   border-radius: 14px;
@@ -278,15 +283,36 @@
   display: none;
 }
 
-.custom-import__paste {
+.custom-import__intake-actions {
   display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.9rem;
+  margin-top: 0.6rem;
+}
+
+/* "First row is headers" toggle beside the Preview data button. */
+.custom-import__headers-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  color: #4b5563;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.custom-import__headers-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #4f46e5;
 }
 
 .custom-import__textarea {
-  flex: 1;
-  min-height: 90px;
+  min-height: var(--intake-field-h);
   padding: 0.75rem;
   border: 1px solid #d1d5db;
   border-radius: 12px;
@@ -370,30 +396,75 @@
 
 .custom-import__fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.85rem 0.9rem;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f8fafc;
 }
 
 .custom-import__field {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #374151;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6b7280;
 }
 
 .custom-import__field select,
 .custom-import__field input {
-  padding: 0.6rem 0.7rem;
+  height: 42px;
+  padding: 0 0.8rem;
   border: 1px solid #d1d5db;
   border-radius: 10px;
   background: white;
-  font-weight: 400;
+  color: #111827;
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* Native selects, restyled: custom chevron, no OS appearance, matching focus ring. */
+.custom-import__field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.1rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 16px;
+  cursor: pointer;
+}
+
+.custom-import__field select:hover {
+  border-color: #a5b4fc;
+}
+
+.custom-import__field select:focus,
+.custom-import__field input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+.custom-import__field input::placeholder {
+  color: #9ca3af;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Sits in the mapping grid's empty cell beside "Bank name"; align-self: end drops the
+   buttons to the bottom of the cell so they line up with the Bank name input. */
 .custom-import__actions {
   display: flex;
+  align-items: flex-end;
+  align-self: end;
   justify-content: flex-end;
   gap: 0.75rem;
 }
@@ -418,16 +489,9 @@
   min-height: 0;
 }
 
-.import-shell__uploads {
-  display: grid;
-  align-content: start;
-  gap: 1rem;
-  min-height: 0;
-  overflow-y: auto;
-}
-
 .import-shell__uploads-heading {
-  margin-bottom: 0.25rem;
+  flex-shrink: 0;
+  margin-bottom: 0.6rem;
 }
 
 .import-shell__uploads-heading h2 {
@@ -440,37 +504,12 @@
   color: #6b7280;
 }
 
-.import-shell__upload-card,
 .import-shell__empty {
   padding: 1rem 1.2rem;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
   background: white;
   box-shadow: 0 8px 24px rgba(17, 24, 39, 0.04);
-}
-
-.import-shell__upload-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
-
-.import-shell__upload-card h2 {
-  margin: 0 0 0.25rem;
-  font-size: 1rem;
-}
-
-.import-shell__upload-card p {
-  margin: 0;
-  color: #6b7280;
-}
-
-.import-shell__upload-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
-  color: #6b7280;
 }
 
 .import-shell__upload-delete {
@@ -524,9 +563,11 @@
   --chart-baseline: #c3c2b7;
   --chart-muted: #898781;
   --chart-secondary: #52514e;
-  --chart-gutter: 104px;
+  --chart-gutter: 172px;
+  --chart-grid-gap: 1rem;
   --chart-plot-h: clamp(160px, 30vh, 320px);
   --totals-row-h: 1.85rem;
+  --x-axis-h: 2rem;
   flex-shrink: 0;
   margin-bottom: 1.25rem;
   padding: 1rem 1.2rem;
@@ -573,102 +614,137 @@
   color: white;
 }
 
+/* Buckets/Banks grouping toggle, placed in the empty top-left of the gutter (y-axis ticks
+   are right-aligned, so the left side is free). Stacked to fit the narrow gutter width. */
+.import-shell__group-toggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.group-pill {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  background: #f8fafc;
+  color: #374151;
+  font-size: 0.72rem;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.group-pill--active {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: white;
+}
+
+/* The range toggle sits in the chart gutter, in the same row as the x-axis date labels,
+   so it stays fixed on the left while the labels scroll with the bars. It must match the
+   x-axis row height so the totals labels below stay aligned with their value rows. */
+.import-shell__x-axis-toggle {
+  display: flex;
+  align-items: center;
+  height: var(--x-axis-h);
+  margin-top: 0.4rem;
+}
+
+.import-shell__x-axis-toggle .import-shell__range-switcher {
+  gap: 0.3rem;
+}
+
+.import-shell__x-axis-toggle .range-pill {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.72rem;
+}
+
+/* Date labels under each bar column. Mirrors the bar row (same gap + per-column basis) so
+   each label lines up with its column, and scrolls horizontally together with the bars. */
+.import-shell__x-axis {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  height: var(--x-axis-h);
+  margin-top: 0.4rem;
+}
+
+.import-shell__x-axis-label {
+  min-width: 0;
+  color: var(--chart-muted);
+  font-size: 0.82rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .import-shell__chart-tools {
   display: flex;
   align-items: center;
   gap: 0.6rem;
 }
 
-.import-shell__exclude {
-  position: relative;
-}
-
-.import-shell__exclude-button {
+/* Upload pill in the chart tools; opens the bank-report upload modal. */
+.import-shell__upload-button {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  height: 34px;
+  padding: 0 0.85rem;
   border: 1px solid #d1d5db;
   border-radius: 999px;
-  padding: 0.45rem 0.8rem;
   background: #f8fafc;
   color: #374151;
   font-size: 0.85rem;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.import-shell__exclude-button:hover,
-.import-shell__exclude-button--open {
+.import-shell__upload-button:hover,
+.import-shell__upload-button:focus-visible {
   border-color: #818cf8;
   background: #eef2ff;
+  color: #4f46e5;
 }
 
-.import-shell__exclude-menu {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  right: 0;
-  z-index: 20;
-  width: 230px;
-  max-height: 300px;
-  overflow-y: auto;
-  padding: 0.4rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: white;
-  box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
-}
-
-.import-shell__exclude-menu-title {
-  margin: 0.25rem 0.5rem 0.4rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--chart-muted);
-}
-
-.import-shell__exclude-empty {
-  margin: 0.5rem;
-  color: #6b7280;
-  font-size: 0.85rem;
-}
-
-.import-shell__exclude-option {
-  display: flex;
+/* Gear button in the chart tools; opens the buckets & categories modal (where spending
+   exclusions now live). */
+.import-shell__settings-button {
+  display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 8px;
-  font-size: 0.85rem;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #f8fafc;
   color: #374151;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.import-shell__exclude-option:hover {
-  background: #f3f4f6;
-}
-
-.import-shell__exclude-option input {
-  cursor: pointer;
-}
-
-.import-shell__exclude-swatch {
-  flex-shrink: 0;
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
-}
-
-.import-shell__exclude-option-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.import-shell__settings-button:hover,
+.import-shell__settings-button:focus-visible {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #4f46e5;
 }
 
 .import-shell__chart-grid {
   display: grid;
   grid-template-columns: var(--chart-gutter) 1fr;
-  gap: 1rem;
+  gap: var(--chart-grid-gap);
 }
 
 .import-shell__chart-gutter {
@@ -761,7 +837,7 @@
 .import-shell__bar-segment {
   position: absolute;
   left: 50%;
-  width: 14px;
+  width: 50%;
   min-height: 2px;
   transform: translateX(-50%);
   cursor: pointer;
@@ -777,43 +853,105 @@
   opacity: 0.3;
 }
 
+/* The column's net total, pinned just above the top edge of the bar. */
+.import-shell__bar-total {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, calc(-100% - 3px));
+  color: var(--chart-secondary);
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .import-shell__totals-labels {
   display: flex;
   flex-direction: column;
   margin-top: 0.5rem;
 }
 
+/* Bank mode has no category line items, so each bank total stands alone: a gap between rows.
+   The label caps the left of the section and the value caps the right so the two halves still
+   read as one band. */
+.import-shell__totals-labels--standalone .import-shell__totals-label--bucket,
+.import-shell__totals-values--standalone .import-shell__totals-row--bucket {
+  margin-top: 0.3rem;
+  box-shadow: none;
+}
+
+.import-shell__totals-labels--standalone .import-shell__totals-label--bucket:first-child,
+.import-shell__totals-values--standalone .import-shell__totals-row--bucket:first-child {
+  margin-top: 0;
+}
+
+/* Base row (shared by category line items, bucket totals, and the Net row). Each bucket's
+   section is color-coded with its bucket color via the inline `--bucket` custom property:
+   categories are light line items, and the bucket total sits at the bottom, bolder and with
+   a stronger tint. Net stays neutral. */
 .import-shell__totals-label {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
   height: var(--totals-row-h);
-  padding: 0 0.3rem;
+  padding: 0 0.4rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
+  /* These rows are <button>s, which pick up the global button drop shadow. Clear it so the
+     band reads flat; the --bucket/--selected variants set their own inset framing lines. */
+  box-shadow: none;
   background: none;
   color: var(--chart-secondary);
-  font-size: 0.75rem;
+  font-size: 0.88rem;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-button.import-shell__totals-label:hover {
-  background: #f3f4f6;
+/* A bucket section is one continuous band: the label rows form its left half and stretch
+   across the chart grid's gap (calc below) to sit flush against the value rows, which form
+   the right half. The band has straight (square) corners — the label caps the left, the
+   value caps the right. */
+
+/* Category line item: not bold, tinted with the bucket color. */
+.import-shell__totals-label--item {
+  box-sizing: border-box;
+  width: calc(100% + var(--chart-grid-gap));
+  padding-left: 0.6rem;
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 10%, white);
+  color: #1f2937;
+  font-weight: 400;
+}
+
+.import-shell__totals-label--item:hover {
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 16%, white);
+}
+
+/* First line item of a section: gap above. */
+.import-shell__totals-label--section-start {
+  margin-top: 0.5rem;
+}
+
+/* Bucket total sits at the bottom of its section: bold, stronger tint. Straight dividing
+   lines cap the band top and bottom so the section reads as a framed block. */
+.import-shell__totals-label--bucket {
+  box-sizing: border-box;
+  width: calc(100% + var(--chart-grid-gap));
+  padding-left: 0.6rem;
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 18%, white);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white),
+    inset 0 -1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white);
+  color: #111827;
+  font-weight: 700;
+}
+
+.import-shell__totals-label--bucket:hover {
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 24%, white);
 }
 
 .import-shell__totals-label--selected {
-  background: rgba(79, 70, 229, 0.12);
-  color: #4f46e5;
-  font-weight: 600;
-}
-
-.import-shell__totals-swatch {
-  flex-shrink: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 30%, white);
+  box-shadow: inset 0 0 0 1.5px var(--bucket, #d1d5db);
 }
 
 .import-shell__totals-label-text {
@@ -823,22 +961,12 @@ button.import-shell__totals-label:hover {
 }
 
 .import-shell__totals-label--net {
-  margin-top: 0.1rem;
-  padding-top: 0.1rem;
+  margin-top: 0.3rem;
+  padding-top: 0.2rem;
   border-top: 1px solid var(--chart-gridline);
-  font-weight: 700;
-  cursor: default;
-}
-
-.import-shell__totals-label--bucket {
-  margin-top: 0.4rem;
   font-weight: 700;
   color: #374151;
   cursor: default;
-}
-
-.import-shell__totals-label--indented {
-  padding-left: 1.2rem;
 }
 
 .import-shell__totals-values {
@@ -853,26 +981,45 @@ button.import-shell__totals-label:hover {
   gap: 0.3rem;
 }
 
+/* Category value row: tinted to match its label half. */
+.import-shell__totals-row--item {
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 10%, white);
+}
+
+.import-shell__totals-row--section-start {
+  margin-top: 0.5rem;
+}
+
+/* Bucket total value row: stronger tint, straight dividers capping the band top and bottom. */
+.import-shell__totals-row--bucket {
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 18%, white);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white),
+    inset 0 -1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white);
+}
+
 .import-shell__totals-row--net {
-  margin-top: 0.1rem;
-  padding-top: 0.1rem;
+  margin-top: 0.3rem;
+  padding-top: 0.2rem;
   border-top: 1px solid var(--chart-gridline);
 }
 
-.import-shell__totals-row--bucket {
-  margin-top: 0.4rem;
-}
-
 .import-shell__totals-cell {
+  box-sizing: border-box;
   height: var(--totals-row-h);
   line-height: var(--totals-row-h);
   min-width: 0;
   padding: 0 2px;
   border: 0;
-  border-radius: 6px;
+  /* A single divider down the left of every column: the leftmost cell splits the row-label
+     ("header") column from the first month, the rest split month from month. */
+  border-left: 1px solid var(--chart-gridline);
+  border-radius: 0;
+  /* Cells are <button>s; clear the global button drop shadow so there's no shadow under each
+     value and no soft second line blurring beside each column's border-left divider. */
+  box-shadow: none;
   background: none;
   color: var(--chart-secondary);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-family: inherit;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -882,16 +1029,22 @@ button.import-shell__totals-label:hover {
   cursor: pointer;
 }
 
+/* Hover tints the cell with its bucket color (inherited via --bucket from the parent row),
+   matching the category/bucket label hovers so both halves of a row highlight alike. */
 .import-shell__totals-cell:hover {
-  background: #f3f4f6;
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 16%, white);
+}
+
+.import-shell__totals-cell--bucket:hover {
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 24%, white);
 }
 
 .import-shell__totals-cell--column {
-  background: rgba(79, 70, 229, 0.08);
+  background: rgba(79, 70, 229, 0.1);
 }
 
 .import-shell__totals-cell--selected {
-  background: rgba(79, 70, 229, 0.18);
+  background: rgba(79, 70, 229, 0.2);
   color: #4f46e5;
   font-weight: 600;
 }
@@ -902,7 +1055,7 @@ button.import-shell__totals-label:hover {
 
 .import-shell__totals-cell--bucket {
   font-weight: 700;
-  color: #374151;
+  color: #111827;
 }
 
 .import-shell__tooltip {
@@ -999,18 +1152,21 @@ button.import-shell__totals-label:hover {
   top: 0;
   z-index: 1;
   padding: 0;
-  background: #f8fafc;
+  background: #e9eefb;
+  border-bottom: 1px solid #d6def2;
 }
 
 .import-shell__sort-button {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
   width: 100%;
   padding: 0.85rem 1rem;
   border: 0;
+  border-radius: 0;
+  box-shadow: none;
   background: none;
-  color: inherit;
+  color: #334155;
   font: inherit;
   font-weight: 600;
   text-align: left;
@@ -1022,12 +1178,37 @@ button.import-shell__totals-label:hover {
 }
 
 .import-shell__sort-caret {
-  font-size: 0.7rem;
-  color: #c0c4cc;
+  font-size: 0.8rem;
+  color: #94a3b8;
 }
 
 .import-shell__sort-button--active .import-shell__sort-caret {
   color: #4f46e5;
+}
+
+.import-shell__table th.import-shell__cell--amount,
+.import-shell__table td.import-shell__cell--amount {
+  text-align: right;
+}
+
+.import-shell__cell--amount .import-shell__sort-button {
+  justify-content: flex-end;
+}
+
+/* Bold total row pinned to the bottom of the transactions table. */
+.import-shell__table-total-row td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: #e9eefb;
+  border-top: 1px solid #d6def2;
+  border-bottom: 0;
+  font-weight: 700;
+  color: #111827;
+}
+
+.import-shell__table-total-row td:first-child {
+  text-align: right;
 }
 
 .import-shell__category-select {
@@ -1152,11 +1333,39 @@ button.import-shell__totals-label:hover {
   background: #fafafa;
 }
 
+/* The permanent "Exclude" tray: a faint red wash so it reads as the leave-out-of-spending
+   destination, distinct from the neutral Ungrouped tray. */
+.bucket-row--exclude {
+  background: #fef2f2;
+}
+
 .bucket-row__head {
   display: flex;
   align-items: center;
   gap: 0.25rem;
   min-width: 0;
+}
+
+/* Per-bucket color picker — the single source of color for the bucket and its categories. */
+.bucket-row__swatch {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.bucket-row__swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.bucket-row__swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
 }
 
 .bucket-row__name {
@@ -1233,25 +1442,13 @@ button.import-shell__totals-label:hover {
   opacity: 0.4;
 }
 
+/* A static dot carrying the pill's bucket color (category color is no longer per-category). */
 .cat-pill__swatch {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: none;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: none;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-.cat-pill__swatch::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.cat-pill__swatch::-webkit-color-swatch {
-  border: none;
-  border-radius: 50%;
+  background: var(--cat, #d1d5db);
 }
 
 .cat-pill__label {
@@ -1359,6 +1556,136 @@ button.import-shell__totals-label:hover {
   background: #4338ca;
 }
 
+/* Shared pop-up chrome: a centered card over a dimmed backdrop (buckets & categories, and
+   the bank-report upload). */
+.app-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(17, 24, 39, 0.45);
+}
+
+.app-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: 85vh;
+  padding: 1.5rem;
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 24px 60px rgba(17, 24, 39, 0.28);
+  overflow: hidden;
+}
+
+.app-modal__close {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.app-modal__close:hover,
+.app-modal__close:focus-visible {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+/* Inside the modal the panel fills the card, so drop its standalone card chrome. */
+.app-modal .category-manager,
+.app-modal .bank-report-upload {
+  flex: 1;
+  min-height: 0;
+}
+
+.app-modal .category-manager {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Bank-report upload: the CSV intake card on top, the recent-uploads table below it (the
+   table is the scroll region so the intake stays put). Fills its column on the Uploads page
+   and the card in the upload modal. */
+.bank-report-upload {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  /* The whole panel is the scroll region. The import card keeps its height (flex-shrink:0),
+     so rather than squeezing the recent-uploads table to nothing when space is tight, the
+     panel scrolls and the table's sticky header pins to the top of this container. */
+  overflow-y: auto;
+}
+
+.bank-report-upload__recent {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The table sizes to content here (the panel scrolls, not the table) so its sticky header
+   pins to the panel and never collapses out of view. */
+.bank-report-upload .import-shell__table-shell {
+  flex: none;
+  overflow: visible;
+}
+
+/* Recent-uploads table reuses the transactions-table look; restore header padding (that
+   table drops it for its sort buttons) and give the name cell an inline-editable input. */
+.uploads-table th {
+  padding: 0.85rem 1rem;
+}
+
+.uploads-table__actions {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.uploads-table__date {
+  white-space: nowrap;
+  color: #4b5563;
+}
+
+.uploads-table__name-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  font-weight: 600;
+}
+
+.uploads-table__name-input:hover {
+  border-color: #e5e7eb;
+}
+
+.uploads-table__name-input:focus {
+  outline: none;
+  border-color: #818cf8;
+  background: white;
+}
+
 @media (max-width: 900px) {
   .import-shell__content {
     padding: 1rem;
@@ -1388,7 +1715,7 @@ button.import-shell__totals-label:hover {
     min-height: auto;
   }
 
-  .import-shell__uploads,
+  .bank-report-upload__recent,
   .category-manager {
     min-height: auto;
     max-height: 320px;

@@ -14,7 +14,9 @@ export type ColumnMapping = {
   categoryIndex?: number | null;
 };
 
-export function parseDelimitedText(text: string): ParsedTable {
+// When `hasHeaders` is false the data has no header row: every line is kept as data and the
+// columns are labelled "Column 1", "Column 2", … (as wide as the widest row).
+export function parseDelimitedText(text: string, hasHeaders = true): ParsedTable {
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -25,9 +27,16 @@ export function parseDelimitedText(text: string): ParsedTable {
   }
 
   const delimiter = lines[0].includes("\t") ? "\t" : ",";
-  const headers = splitDelimitedLine(lines[0], delimiter).map((header) => header.trim());
-  const rows = lines.slice(1).map((line) => splitDelimitedLine(line, delimiter));
 
+  if (hasHeaders) {
+    const headers = splitDelimitedLine(lines[0], delimiter).map((header) => header.trim());
+    const rows = lines.slice(1).map((line) => splitDelimitedLine(line, delimiter));
+    return { headers, rows };
+  }
+
+  const rows = lines.map((line) => splitDelimitedLine(line, delimiter));
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  const headers = Array.from({ length: columnCount }, (_, index) => `Column ${index + 1}`);
   return { headers, rows };
 }
 

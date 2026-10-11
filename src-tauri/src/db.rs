@@ -24,6 +24,7 @@ pub struct UploadRecord {
     pub id: String,
     pub bank_name: String,
     pub file_name: String,
+    pub imported_at: String,
     pub transactions: Vec<TransactionRecord>,
 }
 
@@ -42,6 +43,7 @@ pub struct CategoryRecord {
 pub struct BucketRecord {
     pub id: String,
     pub name: String,
+    pub color: String,
 }
 
 const DEFAULT_CATEGORIES: [(&str, &str, &str); 5] = [
@@ -82,9 +84,23 @@ pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
          );
          CREATE TABLE IF NOT EXISTS buckets (
              id TEXT PRIMARY KEY,
-             name TEXT NOT NULL
+             name TEXT NOT NULL,
+             color TEXT NOT NULL DEFAULT '#4f46e5'
          );",
     )?;
+
+    // Migrate databases created before buckets carried their own color.
+    let has_bucket_color: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('buckets') WHERE name = 'color'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_bucket_color == 0 {
+        conn.execute(
+            "ALTER TABLE buckets ADD COLUMN color TEXT NOT NULL DEFAULT '#4f46e5'",
+            [],
+        )?;
+    }
 
     // Migrate databases created before the `excluded` flag existed.
     let has_excluded: i64 = conn.query_row(

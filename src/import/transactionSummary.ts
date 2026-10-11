@@ -41,10 +41,28 @@ export function resolveBucketKey(dateString: string, range: ChartRange): string 
   return parsedDate ? bucketKeyForDate(parsedDate, range) : null;
 }
 
-export function buildChartSeries(
+function labelForKey(key: string, range: ChartRange): string {
+  if (range === "month") {
+    const [year, month] = key.split("-");
+    return `${month}/${year}`;
+  }
+
+  if (range === "day") {
+    const [year, month, day] = key.split("-");
+    return `${month}/${day}/${year}`;
+  }
+
+  return key;
+}
+
+// Group transactions into time buckets, then into segments keyed by `dimensionOf`
+// (category, bank, …). Segments are emitted in `order`; any dimension not in `order`
+// is dropped. Reserved categories (e.g. transfers) are always excluded.
+function buildSeries(
   transactions: ImportedTransaction[],
   range: ChartRange,
-  categoryOrder: string[],
+  dimensionOf: (transaction: ImportedTransaction) => string,
+  order: string[],
 ): ChartPoint[] {
   const buckets = new Map<string, Map<string, number>>();
 
@@ -59,30 +77,38 @@ export function buildChartSeries(
     }
 
     const bucketKey = bucketKeyForDate(parsedDate, range);
+    const dimension = dimensionOf(transaction);
     const bucket = buckets.get(bucketKey) ?? new Map<string, number>();
-    bucket.set(transaction.category, (bucket.get(transaction.category) ?? 0) + transaction.amount);
+    bucket.set(dimension, (bucket.get(dimension) ?? 0) + transaction.amount);
     buckets.set(bucketKey, bucket);
   });
 
   const sortedEntries = Array.from(buckets.entries()).sort(([left], [right]) => left.localeCompare(right));
 
-  return sortedEntries.map(([key, categoryTotals]) => {
-    let label = key;
-    if (range === "month") {
-      const [year, month] = key.split("-");
-      label = `${month}/${year}`;
-    }
+  return sortedEntries.map(([key, dimensionTotals]) => {
+    const segments = order
+      .filter((name) => dimensionTotals.has(name))
+      .map((name) => ({
+        category: name,
+        value: Number((dimensionTotals.get(name) ?? 0).toFixed(2)),
+      }));
 
-    if (range === "day") {
-      const [year, month, day] = key.split("-");
-      label = `${month}/${day}/${year}`;
-    }
-
-    const segments = categoryOrder.filter((category) => categoryTotals.has(category)).map((category) => ({
-      category,
-      value: Number((categoryTotals.get(category) ?? 0).toFixed(2)),
-    }));
-
-    return { key, label, segments };
+    return { key, label: labelForKey(key, range), segments };
   });
+}
+
+export function buildChartSeries(
+  transactions: ImportedTransaction[],
+  range: ChartRange,
+  categoryOrder: string[],
+): ChartPoint[] {
+  return buildSeries(transactions, range, (transaction) => transaction.category, categoryOrder);
+}
+
+export function buildBankSeries(
+  transactions: ImportedTransaction[],
+  range: ChartRange,
+  bankOrder: string[],
+): ChartPoint[] {
+  return buildSeries(transactions, range, (transaction) => transaction.sourceBank, bankOrder);
 }

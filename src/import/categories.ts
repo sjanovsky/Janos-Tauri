@@ -11,7 +11,36 @@ export type CategoryRecord = {
 export type BucketRecord = {
   id: string;
   name: string;
+  color: string;
 };
+
+// Id used for the catch-all section of categories that don't belong to a bucket.
+export const UNGROUPED_BUCKET_ID = "__ungrouped";
+
+// Neutral gray for the "Ungrouped" section, so it reads as distinct from real buckets.
+export const UNGROUPED_BUCKET_COLOR = "#94a3b8";
+
+// Sentinel id + color for the permanent "Exclude" tray. Categories dropped here are flagged
+// `excluded` and dropped from the spending chart/totals; it isn't a real bucket row.
+export const EXCLUDE_BUCKET_ID = "__exclude";
+export const EXCLUDE_BUCKET_COLOR = "#e11d48";
+
+// New buckets cycle through this palette so each one starts with a distinct color;
+// the user can recolor any bucket with its swatch.
+export const BUCKET_COLOR_PALETTE = [
+  "#4f46e5",
+  "#0ca678",
+  "#e8590c",
+  "#d6336c",
+  "#1098ad",
+  "#f08c00",
+  "#5f3dc4",
+  "#2b8a3e",
+];
+
+export function nextBucketColor(existingCount: number): string {
+  return BUCKET_COLOR_PALETTE[existingCount % BUCKET_COLOR_PALETTE.length];
+}
 
 export const RESERVED_CATEGORIES = ["unclassified", "transfers"] as const;
 export type ReservedCategory = (typeof RESERVED_CATEGORIES)[number];

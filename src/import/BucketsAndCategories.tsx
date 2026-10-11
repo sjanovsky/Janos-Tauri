@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
-import type { BucketRecord, CategoryRecord } from "./categories";
+import {
+  EXCLUDE_BUCKET_COLOR,
+  EXCLUDE_BUCKET_ID,
+  UNGROUPED_BUCKET_COLOR,
+  UNGROUPED_BUCKET_ID,
+  type BucketRecord,
+  type CategoryRecord,
+} from "./categories";
 
-type CategoriesPanelProps = {
+type BucketsAndCategoriesProps = {
   categories: CategoryRecord[];
   buckets: BucketRecord[];
   onAdd: (label: string, color: string) => void;
@@ -9,13 +16,15 @@ type CategoriesPanelProps = {
   onDelete: (id: string) => void;
   onAddBucket: (name: string) => void;
   onRenameBucket: (id: string, name: string) => void;
+  onSetBucketColor: (id: string, color: string) => void;
   onDeleteBucket: (id: string) => void;
-  onSetCategoryBucket: (categoryId: string, bucketId: string | null) => void;
+  // Move a category into a bucket (bucketId), the Ungrouped tray (null), or the Exclude
+  // tray (excluded = true). Bucket and excluded are mutually exclusive placements.
+  onPlaceCategory: (categoryId: string, bucketId: string | null, excluded: boolean) => void;
 };
 
 const NEW_CATEGORY_DEFAULT_COLOR = "#4f46e5";
 const CATEGORY_DRAG_TYPE = "application/x-janos-category";
-const UNGROUPED_KEY = "__ungrouped";
 
 function TrashIcon() {
   return (
@@ -78,7 +87,7 @@ function CloseIcon() {
 
 const byLabel = (a: CategoryRecord, b: CategoryRecord) => a.label.localeCompare(b.label);
 
-function CategoriesPanel({
+function BucketsAndCategories({
   categories,
   buckets,
   onAdd,
@@ -86,9 +95,10 @@ function CategoriesPanel({
   onDelete,
   onAddBucket,
   onRenameBucket,
+  onSetBucketColor,
   onDeleteBucket,
-  onSetCategoryBucket,
-}: CategoriesPanelProps) {
+  onPlaceCategory,
+}: BucketsAndCategoriesProps) {
   const [newLabel, setNewLabel] = useState("");
   const [newColor, setNewColor] = useState(NEW_CATEGORY_DEFAULT_COLOR);
   const [newBucket, setNewBucket] = useState("");
@@ -105,14 +115,17 @@ function CategoriesPanel({
     }
   }, [editingId]);
 
-  // Group categories under their bucket; anything without a (known) bucket falls into the
-  // "Ungrouped" tray at the bottom, which is where newly added categories start.
+  // Place each category in exactly one row: excluded categories go to the "Exclude" tray;
+  // otherwise its (known) bucket, or the "Ungrouped" tray where newly added categories start.
   const bucketIds = new Set(buckets.map((bucket) => bucket.id));
   const categoriesByBucket = new Map<string, CategoryRecord[]>();
   buckets.forEach((bucket) => categoriesByBucket.set(bucket.id, []));
+  const excluded: CategoryRecord[] = [];
   const ungrouped: CategoryRecord[] = [];
   categories.forEach((category) => {
-    if (category.bucketId && bucketIds.has(category.bucketId)) {
+    if (category.excluded) {
+      excluded.push(category);
+    } else if (category.bucketId && bucketIds.has(category.bucketId)) {
       categoriesByBucket.get(category.bucketId)!.push(category);
     } else {
       ungrouped.push(category);
@@ -169,23 +182,26 @@ function CategoriesPanel({
     setDragOverKey((current) => (current === key ? null : current));
   };
 
-  const handleRowDrop = (event: DragEvent<HTMLDivElement>, bucketId: string | null) => {
+  const handleRowDrop = (
+    event: DragEvent<HTMLDivElement>,
+    target: { bucketId: string | null; excluded: boolean },
+  ) => {
     event.preventDefault();
     const categoryId = event.dataTransfer.getData(CATEGORY_DRAG_TYPE) || draggingId;
     if (categoryId) {
-      onSetCategoryBucket(categoryId, bucketId);
+      onPlaceCategory(categoryId, target.bucketId, target.excluded);
     }
     setDraggingId(null);
     setDragOverKey(null);
   };
 
-  const renderPill = (category: CategoryRecord) => {
+  const renderPill = (category: CategoryRecord, sectionColor: string) => {
     const isEditing = editingId === category.id;
     return (
       <div
         key={category.id}
         className={`cat-pill ${draggingId === category.id ? "cat-pill--dragging" : ""}`}
-        style={{ "--cat": category.color } as CSSProperties}
+        style={{ "--cat": sectionColor } as CSSProperties}
         draggable={!isEditing}
         onDragStart={(event) => handlePillDragStart(event, category)}
         onDragEnd={() => {
@@ -193,13 +209,7 @@ function CategoriesPanel({
           setDragOverKey(null);
         }}
       >
-        <input
-          type="color"
-          className="cat-pill__swatch"
-          value={category.color}
-          aria-label={`Color for ${category.label}`}
-          onChange={(event) => onUpdate(category.id, category.label, event.target.value)}
-        />
+        <span className="cat-pill__swatch" aria-hidden="true" />
 
         {isEditing ? (
           <input
@@ -251,7 +261,10 @@ function CategoriesPanel({
     <section className="category-manager">
       <div className="category-manager__heading">
         <h2>Buckets &amp; categories</h2>
-        <p>Drag a category into a bucket to group it. Drop it in “Ungrouped” to pull it back out.</p>
+        <p>
+          Drag a category into a bucket to group it. Drop it in “Exclude” to leave it out of
+          spending, or “Ungrouped” to pull it back out.
+        </p>
       </div>
 
       <div className="bucket-board">
@@ -264,9 +277,16 @@ function CategoriesPanel({
               className={`bucket-row ${isOver ? "bucket-row--drop" : ""}`}
               onDragOver={(event) => handleRowDragOver(event, bucket.id)}
               onDragLeave={(event) => handleRowDragLeave(event, bucket.id)}
-              onDrop={(event) => handleRowDrop(event, bucket.id)}
+              onDrop={(event) => handleRowDrop(event, { bucketId: bucket.id, excluded: false })}
             >
               <div className="bucket-row__head">
+                <input
+                  type="color"
+                  className="bucket-row__swatch"
+                  value={bucket.color}
+                  aria-label={`Color for bucket ${bucket.name}`}
+                  onChange={(event) => onSetBucketColor(bucket.id, event.target.value)}
+                />
                 <input
                   key={bucket.name}
                   type="text"
@@ -301,7 +321,7 @@ function CategoriesPanel({
                 {members.length === 0 ? (
                   <span className="bucket-row__empty">Drag categories here</span>
                 ) : (
-                  members.map(renderPill)
+                  members.map((category) => renderPill(category, bucket.color))
                 )}
               </div>
             </div>
@@ -309,12 +329,35 @@ function CategoriesPanel({
         })}
 
         <div
-          className={`bucket-row bucket-row--ungrouped ${
-            dragOverKey === UNGROUPED_KEY ? "bucket-row--drop" : ""
+          className={`bucket-row bucket-row--exclude ${
+            dragOverKey === EXCLUDE_BUCKET_ID ? "bucket-row--drop" : ""
           }`}
-          onDragOver={(event) => handleRowDragOver(event, UNGROUPED_KEY)}
-          onDragLeave={(event) => handleRowDragLeave(event, UNGROUPED_KEY)}
-          onDrop={(event) => handleRowDrop(event, null)}
+          onDragOver={(event) => handleRowDragOver(event, EXCLUDE_BUCKET_ID)}
+          onDragLeave={(event) => handleRowDragLeave(event, EXCLUDE_BUCKET_ID)}
+          onDrop={(event) => handleRowDrop(event, { bucketId: null, excluded: true })}
+        >
+          <div className="bucket-row__head">
+            <span className="bucket-row__name bucket-row__name--static">Exclude</span>
+          </div>
+          <div className="bucket-row__items">
+            {excluded.length === 0 ? (
+              <span className="bucket-row__empty">Drop here to leave out of spending</span>
+            ) : (
+              excluded
+                .slice()
+                .sort(byLabel)
+                .map((category) => renderPill(category, EXCLUDE_BUCKET_COLOR))
+            )}
+          </div>
+        </div>
+
+        <div
+          className={`bucket-row bucket-row--ungrouped ${
+            dragOverKey === UNGROUPED_BUCKET_ID ? "bucket-row--drop" : ""
+          }`}
+          onDragOver={(event) => handleRowDragOver(event, UNGROUPED_BUCKET_ID)}
+          onDragLeave={(event) => handleRowDragLeave(event, UNGROUPED_BUCKET_ID)}
+          onDrop={(event) => handleRowDrop(event, { bucketId: null, excluded: false })}
         >
           <div className="bucket-row__head">
             <span className="bucket-row__name bucket-row__name--static">Ungrouped</span>
@@ -323,7 +366,10 @@ function CategoriesPanel({
             {ungrouped.length === 0 ? (
               <span className="bucket-row__empty">Drop here to remove from a bucket</span>
             ) : (
-              ungrouped.slice().sort(byLabel).map(renderPill)
+              ungrouped
+                .slice()
+                .sort(byLabel)
+                .map((category) => renderPill(category, UNGROUPED_BUCKET_COLOR))
             )}
           </div>
         </div>
@@ -378,4 +424,4 @@ function CategoriesPanel({
   );
 }
 
-export default CategoriesPanel;
+export default BucketsAndCategories;

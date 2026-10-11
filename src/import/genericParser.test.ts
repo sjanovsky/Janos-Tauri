@@ -29,6 +29,18 @@ describe("parseDelimitedText", () => {
   it("returns empty headers and rows for blank input", () => {
     expect(parseDelimitedText("")).toEqual({ headers: [], rows: [] });
   });
+
+  it("synthesizes Column N headers and keeps every line as data when hasHeaders is false", () => {
+    const csv = ["01/02/2026,Coffee,4.50", "01/03/2026,Lunch,10.00"].join("\n");
+
+    expect(parseDelimitedText(csv, false)).toEqual({
+      headers: ["Column 1", "Column 2", "Column 3"],
+      rows: [
+        ["01/02/2026", "Coffee", "4.50"],
+        ["01/03/2026", "Lunch", "10.00"],
+      ],
+    });
+  });
 });
 
 describe("guessColumnIndex", () => {

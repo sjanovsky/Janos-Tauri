@@ -7,11 +7,11 @@ pub fn list_uploads(state: State<DbState>) -> Result<Vec<UploadRecord>, String> 
     let conn = state.0.lock().map_err(|e| e.to_string())?;
 
     let mut upload_stmt = conn
-        .prepare("SELECT id, bank_name, file_name FROM uploads ORDER BY imported_at DESC")
+        .prepare("SELECT id, bank_name, file_name, imported_at FROM uploads ORDER BY imported_at DESC")
         .map_err(|e| e.to_string())?;
 
-    let uploads: Vec<(String, String, String)> = upload_stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+    let uploads: Vec<(String, String, String, String)> = upload_stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
         .map_err(|e| e.to_string())?
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
@@ -24,7 +24,7 @@ pub fn list_uploads(state: State<DbState>) -> Result<Vec<UploadRecord>, String> 
         .map_err(|e| e.to_string())?;
 
     let mut result = Vec::with_capacity(uploads.len());
-    for (id, bank_name, file_name) in uploads {
+    for (id, bank_name, file_name, imported_at) in uploads {
         let transactions = tx_stmt
             .query_map(params![id], |row| {
                 Ok(TransactionRecord {
@@ -47,6 +47,7 @@ pub fn list_uploads(state: State<DbState>) -> Result<Vec<UploadRecord>, String> 
             id,
             bank_name,
             file_name,
+            imported_at,
             transactions,
         });
     }
@@ -110,6 +111,17 @@ pub fn delete_upload(state: State<DbState>, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn rename_upload(state: State<DbState>, id: String, file_name: String) -> Result<(), String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE uploads SET file_name = ?1 WHERE id = ?2",
+        params![file_name, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn update_transaction_category(
     state: State<DbState>,
     transaction_id: String,
@@ -168,40 +180,23 @@ pub fn upsert_category(
 }
 
 #[tauri::command]
-pub fn set_category_excluded(
+pub fn set_category_placement(
     state: State<DbState>,
     id: String,
     label: String,
     color: String,
     excluded: bool,
-) -> Result<(), String> {
-    let conn = state.0.lock().map_err(|e| e.to_string())?;
-    // Upsert so categories that only exist on transactions (no managed row yet) can
-    // still be excluded; an existing row keeps its label/color and only flips excluded.
-    conn.execute(
-        "INSERT INTO categories (id, label, color, excluded) VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT(id) DO UPDATE SET excluded = ?4",
-        params![id, label, color, excluded],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn set_category_bucket(
-    state: State<DbState>,
-    id: String,
-    label: String,
-    color: String,
     bucket_id: Option<String>,
 ) -> Result<(), String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
-    // Upsert so categories that only exist on transactions can still be assigned a
-    // bucket; an existing row keeps its label/color and only updates bucket_id.
+    // A category's placement is its bucket plus whether it's excluded from spending; both
+    // are set together (the "Exclude" tray is just a placement). Upsert so categories that
+    // only exist on transactions (no managed row yet) can still be placed; an existing row
+    // keeps its label/color and only updates excluded + bucket_id.
     conn.execute(
-        "INSERT INTO categories (id, label, color, bucket_id) VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT(id) DO UPDATE SET bucket_id = ?4",
-        params![id, label, color, bucket_id],
+        "INSERT INTO categories (id, label, color, excluded, bucket_id) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(id) DO UPDATE SET excluded = ?4, bucket_id = ?5",
+        params![id, label, color, excluded, bucket_id],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -211,7 +206,7 @@ pub fn set_category_bucket(
 pub fn list_buckets(state: State<DbState>) -> Result<Vec<BucketRecord>, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, name FROM buckets ORDER BY name COLLATE NOCASE")
+        .prepare("SELECT id, name, color FROM buckets ORDER BY name COLLATE NOCASE")
         .map_err(|e| e.to_string())?;
 
     let buckets: Vec<BucketRecord> = stmt
@@ -219,6 +214,7 @@ pub fn list_buckets(state: State<DbState>) -> Result<Vec<BucketRecord>, String> 
             Ok(BucketRecord {
                 id: row.get(0)?,
                 name: row.get(1)?,
+                color: row.get(2)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -229,12 +225,17 @@ pub fn list_buckets(state: State<DbState>) -> Result<Vec<BucketRecord>, String> 
 }
 
 #[tauri::command]
-pub fn upsert_bucket(state: State<DbState>, id: String, name: String) -> Result<(), String> {
+pub fn upsert_bucket(
+    state: State<DbState>,
+    id: String,
+    name: String,
+    color: String,
+) -> Result<(), String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     conn.execute(
-        "INSERT INTO buckets (id, name) VALUES (?1, ?2)
-         ON CONFLICT(id) DO UPDATE SET name = excluded.name",
-        params![id, name],
+        "INSERT INTO buckets (id, name, color) VALUES (?1, ?2, ?3)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color",
+        params![id, name, color],
     )
     .map_err(|e| e.to_string())?;
     Ok(())

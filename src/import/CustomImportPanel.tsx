@@ -36,6 +36,7 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isDropActive, setIsDropActive] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [hasHeaders, setHasHeaders] = useState(true);
 
   const applyParsedTable = (table: ParsedTable, fileName: string) => {
     if (table.headers.length === 0 || table.rows.length === 0) {
@@ -61,7 +62,7 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
     }
 
     const text = await file.text();
-    applyParsedTable(parseDelimitedText(text), file.name);
+    applyParsedTable(parseDelimitedText(text, hasHeaders), file.name);
   };
 
   const handleBrowseChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -81,7 +82,7 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
       return;
     }
 
-    applyParsedTable(parseDelimitedText(pasteText), "Pasted data");
+    applyParsedTable(parseDelimitedText(pasteText, hasHeaders), "Pasted data");
   };
 
   const resetAll = () => {
@@ -145,31 +146,31 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
   return (
     <section className="custom-import">
       <div className="custom-import__heading">
-        <h2>Custom import</h2>
-        <p>Any other bank? Upload a CSV or paste your own data, then tell us which columns are which.</p>
+        <h2>Upload a bank report</h2>
+        <p>Drop a CSV or paste your statement data, then tell us which columns are which.</p>
       </div>
 
       {!parsed ? (
-        <div className="custom-import__intake">
-          <label
-            className={`custom-import__dropzone ${isDropActive ? "custom-import__dropzone--active" : ""}`}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDropActive(true);
-            }}
-            onDragLeave={() => setIsDropActive(false)}
-            onDrop={handleDrop}
-          >
-            <span>Drop a CSV file here, or click to browse</span>
-            <input
-              type="file"
-              accept=".csv,.txt,text/csv,text/plain"
-              className="custom-import__file-input"
-              onChange={handleBrowseChange}
-            />
-          </label>
+        <>
+          <div className="custom-import__intake">
+            <label
+              className={`custom-import__dropzone ${isDropActive ? "custom-import__dropzone--active" : ""}`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDropActive(true);
+              }}
+              onDragLeave={() => setIsDropActive(false)}
+              onDrop={handleDrop}
+            >
+              <span>Drop a CSV file here, or click to browse</span>
+              <input
+                type="file"
+                accept=".csv,.txt,text/csv,text/plain"
+                className="custom-import__file-input"
+                onChange={handleBrowseChange}
+              />
+            </label>
 
-          <div className="custom-import__paste">
             <textarea
               className="custom-import__textarea"
               placeholder="...or paste data here (CSV, or rows copied from a spreadsheet)"
@@ -177,11 +178,22 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
               onChange={(event) => setPasteText(event.target.value)}
               rows={6}
             />
+          </div>
+
+          <div className="custom-import__intake-actions">
+            <label className="custom-import__headers-toggle">
+              <input
+                type="checkbox"
+                checked={hasHeaders}
+                onChange={(event) => setHasHeaders(event.target.checked)}
+              />
+              First row is headers
+            </label>
             <button type="button" className="custom-import__button" onClick={handlePreviewPaste}>
               Preview data
             </button>
           </div>
-        </div>
+        </>
       ) : (
         <div className="custom-import__mapping">
           <div className="custom-import__preview-shell">
@@ -212,7 +224,7 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
 
           <div className="custom-import__fields">
             <label className="custom-import__field">
-              Date column
+              Date
               <select value={mapping.dateIndex ?? ""} onChange={(event) => handleMappingChange("dateIndex", event.target.value)}>
                 <option value="">Select a column</option>
                 {parsed.headers.map((header, index) => (
@@ -224,7 +236,7 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
             </label>
 
             <label className="custom-import__field">
-              Amount column
+              Amount
               <select
                 value={mapping.amountIndex ?? ""}
                 onChange={(event) => handleMappingChange("amountIndex", event.target.value)}
@@ -239,7 +251,7 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
             </label>
 
             <label className="custom-import__field">
-              Description column
+              Description
               <select
                 value={mapping.descriptionIndex ?? ""}
                 onChange={(event) => handleMappingChange("descriptionIndex", event.target.value)}
@@ -254,7 +266,7 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
             </label>
 
             <label className="custom-import__field">
-              Category column (optional)
+              Category (optional)
               <select
                 value={mapping.categoryIndex ?? ""}
                 onChange={(event) => handleMappingChange("categoryIndex", event.target.value)}
@@ -277,20 +289,20 @@ function CustomImportPanel({ onImport, knownCategories }: CustomImportPanelProps
                 placeholder="e.g. Chase, Venmo, Robinhood"
               />
             </label>
-          </div>
 
-          <div className="custom-import__actions">
-            <button type="button" className="custom-import__button" onClick={resetAll}>
-              Start over
-            </button>
-            <button
-              type="button"
-              className="custom-import__button custom-import__button--primary"
-              disabled={!canImport || isImporting}
-              onClick={handleImport}
-            >
-              {isImporting ? "Importing..." : `Import ${parsed.rows.length} transaction${parsed.rows.length === 1 ? "" : "s"}`}
-            </button>
+            <div className="custom-import__actions">
+              <button type="button" className="custom-import__button" onClick={resetAll}>
+                Start over
+              </button>
+              <button
+                type="button"
+                className="custom-import__button custom-import__button--primary"
+                disabled={!canImport || isImporting}
+                onClick={handleImport}
+              >
+                {isImporting ? "Importing..." : "Import"}
+              </button>
+            </div>
           </div>
         </div>
       )}
