@@ -138,6 +138,29 @@ pub fn update_transaction_category(
 }
 
 #[tauri::command]
+pub fn update_transaction_categories(
+    state: State<DbState>,
+    transaction_ids: Vec<String>,
+    category: String,
+) -> Result<(), String> {
+    // Apply one category to many transactions in a single transaction so a partial failure
+    // doesn't leave the batch half-applied.
+    let mut conn = state.0.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    {
+        let mut stmt = tx
+            .prepare("UPDATE transactions SET category = ?1 WHERE id = ?2")
+            .map_err(|e| e.to_string())?;
+        for id in &transaction_ids {
+            stmt.execute(params![category, id])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn list_categories(state: State<DbState>) -> Result<Vec<CategoryRecord>, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn

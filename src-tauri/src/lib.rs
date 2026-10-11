@@ -88,6 +88,7 @@ pub fn run() {
             spending::delete_upload,
             spending::rename_upload,
             spending::update_transaction_category,
+            spending::update_transaction_categories,
             spending::list_categories,
             spending::upsert_category,
             spending::set_category_placement,

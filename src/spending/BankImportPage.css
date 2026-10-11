@@ -1054,6 +1054,121 @@
   background: white;
 }
 
+.import-shell__bulk-toggle {
+  flex-shrink: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  background: #f8fafc;
+  color: #374151;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.import-shell__bulk-toggle:hover {
+  border-color: #818cf8;
+}
+
+.import-shell__bulk-toggle--active {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.import-shell__bulk-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  background: #eef2ff;
+}
+
+.import-shell__bulk-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #3730a3;
+  white-space: nowrap;
+}
+
+.import-shell__bulk-select {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  background: white;
+  color: #111827;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.import-shell__bulk-select:focus {
+  outline: none;
+  border-color: #818cf8;
+}
+
+.import-shell__bulk-apply {
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  background: #4f46e5;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.import-shell__bulk-apply:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.import-shell__bulk-apply:disabled {
+  background: #c7d2fe;
+  color: #eef2ff;
+  cursor: not-allowed;
+}
+
+.import-shell__table th.import-shell__cell--select,
+.import-shell__table td.import-shell__cell--select {
+  width: 2.75rem;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
+}
+
+.import-shell__cell--select input {
+  width: 1.2rem;
+  height: 1.2rem;
+  cursor: pointer;
+  accent-color: #4f46e5;
+}
+
+.import-shell__row--selected {
+  background: #eef2ff;
+}
+
+/* In bulk mode the whole row is a click target for toggling selection. */
+.import-shell__table tbody tr.import-shell__row--clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.import-shell__table tbody tr.import-shell__row--clickable:hover {
+  background: #f5f7ff;
+}
+
+.import-shell__table tbody tr.import-shell__row--clickable.import-shell__row--selected:hover {
+  background: #e0e7ff;
+}
+
 .import-shell__filter-dropdown {
   position: relative;
   flex-shrink: 0;
@@ -1317,6 +1432,7 @@
   padding: 0.35rem 0;
   background: #f8fafc;
   color: #111827;
+  font-family: inherit;
   font-size: 0.85rem;
   line-height: 1.2;
   text-align: center;
@@ -1329,6 +1445,39 @@
   background: #fffbeb;
   color: #92400e;
   font-weight: 600;
+}
+
+/* The category pill sizes to its selected label via a hidden mirror span. The select is taken
+   out of flow (absolute) so it fills the wrapper without forcing it as wide as its widest option. */
+.import-shell__category-pill-wrap {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.import-shell__category-pill-wrap > .import-shell__category-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.import-shell__category-pill-mirror {
+  display: block;
+  visibility: hidden;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  /* Match the select's font exactly so its width is measured correctly; the ~2px of extra
+     horizontal padding over the select (0.7rem) is a safety margin against sub-pixel rounding. */
+  padding: 0.45rem 0.8rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 400;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-height: 30px;
 }
 
 .bank-settings {
@@ -1885,11 +2034,95 @@ textarea.bucket-row__name {
   color: #111827;
 }
 
+/* The manage modal: a tab strip (mirroring the app's top-bar tabs) over the active panel. */
+.manage-modal {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Mirror the app's top-bar tabs, tinted to match the transactions table header: a light-blue
+   full-bleed bar with rounded-top tabs, the active one lifted in white so it reads as continuous
+   with the modal body below. */
+.manage-modal__tabs {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-end;
+  gap: 0.35rem;
+  /* Negative margins cancel the modal's padding so the bar spans edge to edge; the modal's
+     rounded corners + overflow:hidden clip its top corners. The right padding keeps the last
+     tab clear of the close button, which sits on this bar. */
+  margin: -1.5rem -1.5rem 1.25rem;
+  padding: 0.6rem 3rem 0 1.5rem;
+  background: #e9eefb;
+}
+
+.manage-modal__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 1.15rem;
+  border: 0;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.manage-modal__tab:hover {
+  background: rgba(17, 24, 39, 0.05);
+  color: #334155;
+}
+
+.manage-modal__tab--active,
+.manage-modal__tab--active:hover {
+  background: white;
+  color: #111827;
+}
+
+.manage-modal__tab-icon {
+  display: inline-flex;
+}
+
+.manage-modal__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* Inside the modal the panel fills the card, so drop its standalone card chrome. */
 .app-modal .category-manager,
-.app-modal .bank-report-upload {
+.app-modal .bank-report-upload,
+.app-modal .bank-settings {
   flex: 1;
   min-height: 0;
+}
+
+/* The bank panel sizes itself in its standalone layout; in the modal it fills the body and lets
+   its list scroll. */
+.manage-modal .bank-settings {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.manage-modal .bank-settings__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Inside the modal the panels' sub-cards sit flush under the tab bar, so drop their drop shadows. */
+.manage-modal .custom-import,
+.manage-modal .import-shell__empty {
+  box-shadow: none;
 }
 
 .app-modal .category-manager {

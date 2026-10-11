@@ -48,6 +48,8 @@ type TransactionListProps = {
   }[];
   bankRecords: BankRecord[];
   onCategoryChange: (transactionId: string, category: Category) => void;
+  // Apply one category to many transactions at once (bulk update).
+  onBulkCategoryChange: (transactionIds: string[], category: Category) => void;
 };
 
 // The right-hand column of the Spending view: an active-filter banner (driven by the chart's
@@ -70,8 +72,15 @@ function TransactionList({
   categoryOptionsByBucket,
   bankRecords,
   onCategoryChange,
+  onBulkCategoryChange,
 }: TransactionListProps) {
   const [search, setSearch] = useState("");
+  // Bulk-update mode: a checkbox column appears and a toolbar applies one category to all
+  // selected rows at once. selectedIds may outlive a row briefly (filter/sort changes); it's
+  // always intersected with the visible rows before anything acts on it.
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState("");
   // Unchecked values per filter; empty set means that field isn't narrowing anything.
   const [excludedBanks, setExcludedBanks] = useState<Set<string>>(new Set());
   const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
@@ -144,6 +153,58 @@ function TransactionList({
     [hasLocalFilter, visibleTransactions, total],
   );
 
+  // Selections only ever act on rows the user can currently see, so a stale id left behind by a
+  // filter/sort change never silently recategorizes something off-screen.
+  const selectedVisibleIds = useMemo(
+    () => visibleTransactions.filter((transaction) => selectedIds.has(transaction.id)).map((t) => t.id),
+    [visibleTransactions, selectedIds],
+  );
+  const selectedVisibleCount = selectedVisibleIds.length;
+  const allVisibleSelected =
+    visibleTransactions.length > 0 && selectedVisibleCount === visibleTransactions.length;
+
+  // Drive the header checkbox's indeterminate state (no HTML attribute exists for it).
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected;
+    }
+  }, [selectedVisibleCount, allVisibleSelected]);
+
+  const toggleBulkMode = () => {
+    setBulkMode((on) => !on);
+    setSelectedIds(new Set());
+    setBulkCategory("");
+  };
+
+  const toggleRowSelected = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(visibleTransactions.map((t) => t.id)));
+  };
+
+  const applyBulkCategory = () => {
+    if (!bulkCategory || selectedVisibleCount === 0) {
+      return;
+    }
+    onBulkCategoryChange(selectedVisibleIds, bulkCategory as Category);
+    setSelectedIds(new Set());
+    setBulkCategory("");
+    setBulkMode(false);
+  };
+
+  const footerColSpan = SORT_COLUMNS.length - 1 + (bulkMode ? 1 : 0);
+
   return (
     <>
       <div className="import-shell__master-right">
@@ -183,6 +244,45 @@ function TransactionList({
               excluded={excludedCategories}
               onChange={setExcludedCategories}
             />
+            <button
+              type="button"
+              className={`import-shell__bulk-toggle ${bulkMode ? "import-shell__bulk-toggle--active" : ""}`}
+              onClick={toggleBulkMode}
+            >
+              {bulkMode ? "Cancel" : "Bulk update"}
+            </button>
+          </div>
+        )}
+
+        {bulkMode && (
+          <div className="import-shell__bulk-bar">
+            <span className="import-shell__bulk-count">
+              {selectedVisibleCount} selected
+            </span>
+            <select
+              className="import-shell__bulk-select"
+              value={bulkCategory}
+              onChange={(event) => setBulkCategory(event.target.value)}
+            >
+              <option value="">Change category to…</option>
+              {categoryOptionsByBucket.map((group) => (
+                <optgroup key={group.bucketLabel} label={group.bucketLabel}>
+                  {group.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="import-shell__bulk-apply"
+              onClick={applyBulkCategory}
+              disabled={!bulkCategory || selectedVisibleCount === 0}
+            >
+              Apply
+            </button>
           </div>
         )}
 
@@ -199,6 +299,17 @@ function TransactionList({
             <table className="import-shell__table">
               <thead>
                 <tr>
+                  {bulkMode && (
+                    <th className="import-shell__cell--select">
+                      <input
+                        ref={selectAllRef}
+                        type="checkbox"
+                        aria-label="Select all shown transactions"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
+                  )}
                   {SORT_COLUMNS.map((column) => {
                     const activeSort = sort && sort.key === column.key ? sort : null;
                     const ariaSort = activeSort
@@ -238,10 +349,40 @@ function TransactionList({
                   const categoryColor =
                     bucketColorByCategory[transaction.category] ?? getCategoryColor(transaction.category);
                   const selectedCategoryLabel = getCategoryLabel(transaction.category);
-                  const categoryWidth = Math.max(70, selectedCategoryLabel.length * 9 + 24);
 
                   return (
-                    <tr key={transaction.id}>
+                    <tr
+                      key={transaction.id}
+                      className={
+                        bulkMode
+                          ? `import-shell__row--clickable ${
+                              selectedIds.has(transaction.id) ? "import-shell__row--selected" : ""
+                            }`
+                          : undefined
+                      }
+                      onClick={
+                        bulkMode
+                          ? (event) => {
+                              // Let the row's own controls (the category select, the checkbox) handle
+                              // their clicks; a click anywhere else toggles the row's selection.
+                              if ((event.target as HTMLElement).closest("input, select, button, a")) {
+                                return;
+                              }
+                              toggleRowSelected(transaction.id);
+                            }
+                          : undefined
+                      }
+                    >
+                      {bulkMode && (
+                        <td className="import-shell__cell--select">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${transaction.description}`}
+                            checked={selectedIds.has(transaction.id)}
+                            onChange={() => toggleRowSelected(transaction.id)}
+                          />
+                        </td>
+                      )}
                       <td>{transaction.date}</td>
                       <td>{transaction.description}</td>
                       <td>
@@ -261,51 +402,54 @@ function TransactionList({
                         })()}
                       </td>
                       <td className="import-shell__cell--category-value">
-                        <select
-                          key={transaction.category}
-                          className={`import-shell__category-select ${
-                            transaction.category === "unclassified"
-                              ? "import-shell__category-select--unclassified"
-                              : ""
-                          }`}
-                          value={transaction.category}
-                          style={{
-                            width: `${categoryWidth}px`,
-                            background: `color-mix(in srgb, ${categoryColor} 18%, white)`,
-                            borderColor: categoryColor,
-                            color: "#1f2937",
-                            fontWeight: 400,
-                            fontSize: "0.85rem",
-                            lineHeight: 1.2,
-                            borderRadius: 999,
-                            minHeight: "30px",
-                            padding: "0.45rem 0.7rem",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            textAlign: "center",
-                            WebkitAppearance: "none",
-                            appearance: "none",
-                            backgroundImage: "none",
-                            textTransform: "none",
-                          }}
-                          onChange={(event) => {
-                            const nextCategory = event.target.value;
-                            if (nextCategory !== transaction.category) {
-                              onCategoryChange(transaction.id, nextCategory as Category);
-                            }
-                          }}
-                        >
-                          {categoryOptionsByBucket.map((group) => (
-                            <optgroup key={group.bucketLabel} label={group.bucketLabel}>
-                              {group.options.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
+                        <span className="import-shell__category-pill-wrap">
+                          <select
+                            key={transaction.category}
+                            className={`import-shell__category-select ${
+                              transaction.category === "unclassified"
+                                ? "import-shell__category-select--unclassified"
+                                : ""
+                            }`}
+                            value={transaction.category}
+                            style={{
+                              background: `color-mix(in srgb, ${categoryColor} 18%, white)`,
+                              borderColor: categoryColor,
+                              color: "#1f2937",
+                              fontWeight: 400,
+                              fontSize: "0.85rem",
+                              lineHeight: 1.2,
+                              borderRadius: 999,
+                              padding: "0.45rem 0.7rem",
+                              textAlign: "center",
+                              WebkitAppearance: "none",
+                              appearance: "none",
+                              backgroundImage: "none",
+                              textTransform: "none",
+                            }}
+                            onChange={(event) => {
+                              const nextCategory = event.target.value;
+                              if (nextCategory !== transaction.category) {
+                                onCategoryChange(transaction.id, nextCategory as Category);
+                              }
+                            }}
+                          >
+                            {categoryOptionsByBucket.map((group) => (
+                              <optgroup key={group.bucketLabel} label={group.bucketLabel}>
+                                {group.options.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                          {/* Hidden copy of just the selected label sizes the pill to its text; the
+                              select overlays it. Without this an appearance:none select widens to fit
+                              its widest option instead of the chosen one. */}
+                          <span className="import-shell__category-pill-mirror" aria-hidden="true">
+                            {selectedCategoryLabel}
+                          </span>
+                        </span>
                       </td>
                       <td className="import-shell__cell--amount">
                         {currencyFormatter.format(transaction.amount)}
@@ -316,7 +460,7 @@ function TransactionList({
               </tbody>
               <tfoot>
                 <tr className="import-shell__table-total-row">
-                  <td colSpan={SORT_COLUMNS.length - 1}>Total</td>
+                  <td colSpan={footerColSpan}>Total</td>
                   <td className="import-shell__cell--amount">{currencyFormatter.format(visibleTotal)}</td>
                 </tr>
               </tfoot>

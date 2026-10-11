@@ -10,9 +10,7 @@ import SpendingChart, {
   type TotalsDisplayRow,
 } from "./SpendingChart";
 import TransactionList, { type SortKey, type SortState } from "./TransactionList";
-import UploadModal from "./UploadModal";
-import BucketsModal from "./BucketsModal";
-import BankSettingsModal from "./BankSettingsModal";
+import ManageModal, { type ManageTab } from "./ManageModal";
 import { buildBankSeries, buildChartSeries, parseDate, resolveBucketKey, type ChartRange } from "./lib/transactionSummary";
 import type { BankRecord } from "./lib/banks";
 import { computeDivergingScale } from "./lib/chartScale";
@@ -66,9 +64,9 @@ function SpendingPage() {
   const [categoryRecords, setCategoryRecords] = useState<CategoryRecord[]>([]);
   const [buckets, setBuckets] = useState<BucketRecord[]>([]);
   const [bankRecords, setBankRecords] = useState<BankRecord[]>([]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [bankSettingsOpen, setBankSettingsOpen] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  // The single manage modal (Upload / Banks / Buckets & Categories tabs). null = closed; a tab id
+  // opens it straight to that tab.
+  const [manageTab, setManageTab] = useState<ManageTab | null>(null);
 
   useEffect(() => {
     invoke<UploadedFileView[]>("list_uploads")
@@ -592,6 +590,26 @@ function SpendingPage() {
     });
   };
 
+  const handleBulkCategoryChange = (transactionIds: string[], category: Category) => {
+    if (transactionIds.length === 0) {
+      return;
+    }
+    const idSet = new Set(transactionIds);
+    setUploads((current) =>
+      current.map((upload) => ({
+        ...upload,
+        transactions: upload.transactions.map((transaction) =>
+          idSet.has(transaction.id) ? { ...transaction, category } : transaction,
+        ),
+      })),
+    );
+
+    invoke("update_transaction_categories", { transactionIds, category }).catch((error) => {
+      console.error("Failed to save bulk category change", error);
+      setDbError("Couldn't save those category changes to the database.");
+    });
+  };
+
   const persistUpload = async (
     bankName: string,
     fileName: string,
@@ -909,6 +927,14 @@ function SpendingPage() {
     onRenameUpload: handleRenameUpload,
   };
 
+  const bankSettingsProps = {
+    banks: bankRecords,
+    onAddBank: handleAddBank,
+    onUpdateBank: handleUpdateBank,
+    onDeleteBank: handleDeleteBank,
+    onSetBankLogo: handleSetBankLogo,
+  };
+
   return (
     <>
       {dbError && <div className="import-shell__db-error">{dbError}</div>}
@@ -932,9 +958,9 @@ function SpendingPage() {
             onToggleBucketSegment={toggleBucketSegment}
             onToggleCategoryFilter={toggleCategoryFilter}
             onToggleBucketFilter={toggleBucketFilter}
-            onOpenUpload={() => setUploadOpen(true)}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenBankSettings={() => setBankSettingsOpen(true)}
+            onOpenUpload={() => setManageTab("upload")}
+            onOpenSettings={() => setManageTab("buckets")}
+            onOpenBankSettings={() => setManageTab("banks")}
           />
 
           <TransactionList
@@ -955,27 +981,19 @@ function SpendingPage() {
             categoryOptionsByBucket={categoryOptionsByBucket}
             bankRecords={bankRecords}
             onCategoryChange={handleCategoryChange}
+            onBulkCategoryChange={handleBulkCategoryChange}
           />
         </div>
       </section>
 
-      {settingsOpen && (
-        <BucketsModal {...bucketsAndCategoriesProps} onClose={() => setSettingsOpen(false)} />
-      )}
-
-      {bankSettingsOpen && (
-        <BankSettingsModal
-          banks={bankRecords}
-          onClose={() => setBankSettingsOpen(false)}
-          onAddBank={handleAddBank}
-          onUpdateBank={handleUpdateBank}
-          onDeleteBank={handleDeleteBank}
-          onSetBankLogo={handleSetBankLogo}
+      {manageTab && (
+        <ManageModal
+          initialTab={manageTab}
+          onClose={() => setManageTab(null)}
+          upload={bankReportUploadProps}
+          bank={bankSettingsProps}
+          buckets={bucketsAndCategoriesProps}
         />
-      )}
-
-      {uploadOpen && (
-        <UploadModal {...bankReportUploadProps} onClose={() => setUploadOpen(false)} />
       )}
     </>
   );
