@@ -245,6 +245,9 @@ function SpendingPage() {
   );
 
   const categoryTotals = useMemo(() => {
+    // Every defined (selected, non-excluded) category gets a row, even one with no spending in
+    // the current view — its columns just read "—". This keeps the totals section in sync with
+    // the categories managed in BucketsAndCategories.
     const activeRows = categoryList
       .filter((category) => selectedCategories.includes(category) && !excludedCategories.has(category))
       .map((category) => {
@@ -253,8 +256,7 @@ function SpendingPage() {
           return segment ? segment.value : 0;
         });
         return { category, perColumn };
-      })
-      .filter((row) => row.perColumn.some((value) => value !== 0));
+      });
 
     const columnCount = chartSeries.length;
     const sumRows = (rows: { perColumn: number[] }[]) =>
