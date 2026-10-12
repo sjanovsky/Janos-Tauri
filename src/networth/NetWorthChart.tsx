@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { DivergingScale } from "../spending/lib/chartScale";
-import { currencyFormatter, wholeCurrencyFormatter } from "../spending/lib/format";
+import { abbreviateCurrency, currencyFormatter, wholeCurrencyFormatter } from "../spending/lib/format";
 import {
   formatMonthLabel,
   type BucketGroup,
@@ -14,14 +14,18 @@ import {
 // headers, and the balance cells so each column stays aligned top to bottom). These budget that
 // width: roughly one digit's worth of the cell font (0.82rem, tabular-nums) per character of the
 // widest value, plus the cell's padding and divider. Counting "$" and "," at the wider digit width
-// leaves a little slack so the largest value never truncates.
+// leaves a little slack so the largest value never truncates. Kept tight so month columns hug their
+// text (no wasted space around the numbers) and more months fit before the chart scrolls.
 const CHAR_WIDTH_PX = 7.5;
-const COLUMN_PADDING_PX = 12;
+const COLUMN_PADDING_PX = 8;
 // Floor so a month column never gets narrower than its header ("Oct'26", with a remove button).
 const MIN_COLUMN_BASIS = 60;
 // A year column packs up to twelve monthly bars into one width, so it needs a wider floor than a
 // single value cell would — enough that each month's bar stays visible.
 const YEAR_MIN_COLUMN_BASIS = 104;
+// The gap (px) between columns, mirroring the 2px gap on the net-worth bars, x-axis, and totals
+// rows in CSS. Used to pin the month-view track to the columns' exact total width.
+const COLUMN_GAP_PX = 2;
 
 // Month choices for the column date editor, "01".."12" with short labels (kept compact so the
 // editor fits within a month column). Built once.
@@ -93,12 +97,11 @@ function NetWorthChart({
   // Which column's date is currently being edited (its header shows the month picker).
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
 
-  // The minimum width every column gets: just enough for the widest value shown anywhere in the
-  // grid (account balances, bucket totals, and the Net worth row). It's a flex-basis, not a fixed
-  // width — the columns grow to share any leftover space so a handful of months fill the chart
-  // instead of leaving a blank gap, and only once this basis no longer fits does the chart start
-  // scrolling (ending exactly at the last month). Year columns get a wider floor so their packed
-  // monthly bars stay readable.
+  // The width every column gets: just enough for the widest value shown anywhere in the grid
+  // (account balances, bucket totals, and the Net worth row). In month view columns hold exactly
+  // this width (see columnFlex) so each hugs its numbers — no wasted space around the text — and as
+  // many months as fit show before the chart scrolls. Year columns get a wider floor so their
+  // packed monthly bars stay readable, and they stretch to share the width (a full-width overview).
   const columnBasis = useMemo(() => {
     let widest = 0;
     const consider = (value: number) => {
@@ -129,6 +132,19 @@ function NetWorthChart({
     const floor = range === "year" ? YEAR_MIN_COLUMN_BASIS : MIN_COLUMN_BASIS;
     return Math.max(floor, Math.ceil(widest * CHAR_WIDTH_PX) + COLUMN_PADDING_PX);
   }, [groups, netPerColumn, range]);
+
+  // How every column (bar group, header, and value cell) flexes. Month columns sit at their exact
+  // basis (grow 0) so they stay tight; year columns grow (grow 1) to share the width and fill the
+  // chart. Shared by all three rows so a column's bar, header, and cells always line up.
+  const columnFlex = `${range === "month" ? "0 0" : "1 0"} ${columnBasis}px`;
+
+  // In month view the columns don't stretch, so pin the scrolling track to their exact total width:
+  // the plot, gridlines, headers, and value rows all end at the last month (nothing trailing off to
+  // the right, and scrolling stops there). Year view leaves the track to its CSS (stretch to fill).
+  const monthTrackWidth =
+    range === "month"
+      ? columns.length * columnBasis + Math.max(0, columns.length - 1) * COLUMN_GAP_PX
+      : null;
 
   const commitCell = (accountId: string, month: string, wasExplicit: boolean, raw: string) => {
     const parsed = parseAmount(raw);
@@ -242,7 +258,10 @@ function NetWorthChart({
             </div>
 
             <div className="import-shell__chart-scroll">
-              <div className="import-shell__chart-track">
+              <div
+                className="import-shell__chart-track"
+                style={monthTrackWidth !== null ? { width: monthTrackWidth, minWidth: monthTrackWidth } : undefined}
+              >
                 <div className="import-shell__chart-plot">
                   {hasData ? (
                     <>
@@ -262,7 +281,7 @@ function NetWorthChart({
                             className={`networth-bar-group ${
                               column.bars.length > 1 ? "networth-bar-group--multi" : ""
                             }`}
-                            style={{ flex: `1 0 ${columnBasis}px` }}
+                            style={{ flex: columnFlex }}
                           >
                             {column.bars.map((point) => (
                               <BarColumn
@@ -295,7 +314,7 @@ function NetWorthChart({
                       <div
                         key={column.key}
                         className="import-shell__x-axis-label networth-month-head"
-                        style={{ flex: `1 0 ${columnBasis}px` }}
+                        style={{ flex: columnFlex }}
                       >
                         {column.editable && month ? (
                           editingMonth === month ? (
@@ -344,7 +363,7 @@ function NetWorthChart({
                       key={group.meta.id}
                       group={group}
                       columns={columns}
-                      columnBasis={columnBasis}
+                      columnFlex={columnFlex}
                       commitCell={commitCell}
                     />
                   ))}
@@ -353,7 +372,7 @@ function NetWorthChart({
                       <div
                         key={columns[index].key}
                         className="import-shell__totals-cell import-shell__totals-cell--net networth-readonly-cell"
-                        style={{ flex: `1 0 ${columnBasis}px` }}
+                        style={{ flex: columnFlex }}
                       >
                         {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
                       </div>
@@ -461,7 +480,7 @@ function BarColumn({ point, baselinePct, scale, showTotal, onShow, onHide }: Bar
     >
       {showTotal && allRects.length > 0 && (
         <span className="import-shell__bar-total" style={{ top: `${tooltipTopPct}%` }}>
-          {wholeCurrencyFormatter.format(netTotal)}
+          {abbreviateCurrency(netTotal)}
         </span>
       )}
       {allRects.map(({ segment, topPct, heightPct, borderRadius }) => (
@@ -511,14 +530,14 @@ function GroupLabels({ group }: { group: BucketGroup }) {
 type GroupValuesProps = {
   group: BucketGroup;
   columns: ChartColumn[];
-  columnBasis: number;
+  columnFlex: string;
   commitCell: (accountId: string, month: string, wasExplicit: boolean, raw: string) => boolean;
 };
 
 // One bucket's value rows in the track: a balance cell per account/column, then the bucket's
 // (read-only) per-column total. A month column's account cell is an editable input; a year column's
 // is a read-only year-end balance (balances are entered in Months view).
-function GroupValues({ group, columns, columnBasis, commitCell }: GroupValuesProps) {
+function GroupValues({ group, columns, columnFlex, commitCell }: GroupValuesProps) {
   const accent = { "--bucket": group.meta.color } as CSSProperties;
 
   return (
@@ -540,7 +559,7 @@ function GroupValues({ group, columns, columnBasis, commitCell }: GroupValuesPro
                 <div
                   key={column.key}
                   className="import-shell__totals-cell networth-readonly-cell"
-                  style={{ flex: `1 0 ${columnBasis}px` }}
+                  style={{ flex: columnFlex }}
                 >
                   {cell.value === null ? "—" : wholeCurrencyFormatter.format(cell.value)}
                 </div>
@@ -581,7 +600,7 @@ function GroupValues({ group, columns, columnBasis, commitCell }: GroupValuesPro
               <div
                 key={column.key}
                 className="import-shell__totals-cell networth-input-cell"
-                style={{ flex: `1 0 ${columnBasis}px` }}
+                style={{ flex: columnFlex }}
               >
                 <input
                   // Remount (resetting defaultValue) whenever the stored balance for this cell changes.
@@ -608,7 +627,7 @@ function GroupValues({ group, columns, columnBasis, commitCell }: GroupValuesPro
           <div
             key={columns[index].key}
             className="import-shell__totals-cell import-shell__totals-cell--bucket networth-readonly-cell"
-            style={{ flex: `1 0 ${columnBasis}px` }}
+            style={{ flex: columnFlex }}
           >
             {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
           </div>

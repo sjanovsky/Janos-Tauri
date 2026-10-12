@@ -2560,13 +2560,6 @@ textarea.bucket-row__name {
   min-width: 0;
 }
 
-/* A month column's lone bar sits at 70% of the (full-width) column, centred by the group, so the
-   monthly bars read slimmer with breathing room on either side. Year columns keep their packed bars
-   filling the column. */
-.networth-bar-group:not(.networth-bar-group--multi) .import-shell__bar-col {
-  flex: 0 0 70%;
-}
-
 /* Net-worth value cells are inputs or read-only totals, not the spending page's filter buttons, so
    suppress that hover/column highlight; each row's bucket tint still shows through. */
 .networth-layout .import-shell__totals-cell:hover {
