@@ -20,9 +20,14 @@ const CHAR_WIDTH_PX = 7.5;
 const COLUMN_PADDING_PX = 28;
 // Floor so a month column never gets narrower than its header ("Oct'26", with a remove button).
 const MIN_COLUMN_BASIS = 76;
-// A year column packs up to twelve monthly bars into one width, so it needs a wider floor than a
-// single value cell would — enough that each month's bar stays visible.
-const YEAR_MIN_COLUMN_BASIS = 104;
+// In Years view the bars are one flat run of months and a value column hangs beneath only some of
+// them. Bars never get narrower than this (the track scrolls instead).
+const YEAR_MIN_BAR_PX = 14;
+// Years view: height (px) of the guide lines linking a labelled bar to its column header. The axis
+// row that holds them keeps the same total height as the gutter's Months/Years toggle row (the
+// x-axis height plus its top margin) so the value rows stay level with their row labels.
+const YEAR_GUIDE_PX = 14;
+const YEAR_AXIS_ROW_HEIGHT = "calc(var(--x-axis-h) + 0.4rem)";
 // The gap (px) between columns, mirroring the 2px gap on the net-worth bars, x-axis, and totals
 // rows in CSS. Used to pin the month-view track to the columns' exact total width.
 const COLUMN_GAP_PX = 2;
@@ -44,6 +49,8 @@ type NetWorthChartProps = {
   range: NetWorthRange;
   // One column per month or per year, each carrying the bar(s) drawn above it. See ChartColumn.
   columns: ChartColumn[];
+  // Years view only: every month's bar, in order. Each column's `barIndex` points into this list.
+  monthlyBars: NetWorthPoint[];
   scale: DivergingScale;
   groups: BucketGroup[];
   netPerColumn: number[];
@@ -83,6 +90,7 @@ function NetWorthChart({
   hasData,
   range,
   columns,
+  monthlyBars,
   scale,
   groups,
   netPerColumn,
@@ -139,14 +147,78 @@ function NetWorthChart({
         consider(value);
       }
     });
-    const floor = range === "year" ? YEAR_MIN_COLUMN_BASIS : MIN_COLUMN_BASIS;
-    return Math.max(floor, Math.ceil(widest * CHAR_WIDTH_PX) + COLUMN_PADDING_PX);
-  }, [groups, netPerColumn, range]);
+    return Math.max(MIN_COLUMN_BASIS, Math.ceil(widest * CHAR_WIDTH_PX) + COLUMN_PADDING_PX);
+  }, [groups, netPerColumn]);
 
-  // How every column (bar group, header, and value cell) flexes. Month columns sit at their exact
-  // basis (grow 0) so they stay tight; year columns grow (grow 1) to share the width and fill the
-  // chart. Shared by all three rows so a column's bar, header, and cells always line up.
-  const columnFlex = `${range === "month" ? "0 0" : "1 0"} ${columnBasis}px`;
+  const isYear = range === "year";
+
+  // How every month column (bar group, header, and value cell) flexes: at its exact basis (grow 0)
+  // so it stays tight. Shared by all three rows so a column's bar, header, and cells line up.
+  const columnFlex = `0 0 ${columnBasis}px`;
+
+  // Years view: value columns aren't one-per-bar, so each is placed beneath the bar of the month it
+  // reports (a year's column is its last month). The bars are inset half a column from each edge, so
+  // even the first and last columns sit centered under their bars. Columns whose bars are too close
+  // for them to fit side by side are pushed apart (the guide lines still lead from bar to column).
+  // Needs the track's pixel width, tracked below.
+  const barCount = monthlyBars.length;
+  const labelledBars = useMemo(
+    () => new Set(columns.map((column) => column.barIndex).filter((index): index is number => index !== null)),
+    [columns],
+  );
+  const [trackWidth, setTrackWidth] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = trackRef.current;
+    if (!el || !isYear) {
+      return undefined;
+    }
+    setTrackWidth(el.clientWidth);
+    const observer = new ResizeObserver(() => setTrackWidth(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isYear, hasAccounts]);
+
+  const yearPlacements = useMemo(() => {
+    const placements = new Map<string, { barX: number; colX: number }>();
+    if (!isYear || barCount === 0 || trackWidth <= 0) {
+      return placements;
+    }
+    const barsWidth = Math.max(0, trackWidth - columnBasis);
+    const barX = columns.map((column) =>
+      column.barIndex === null ? 0 : columnBasis / 2 + (barsWidth * (column.barIndex + 0.5)) / barCount,
+    );
+    const colX = barX.slice();
+    const lo = columnBasis / 2;
+    const hi = trackWidth - columnBasis / 2;
+    for (let pass = 0; pass < 20; pass += 1) {
+      let moved = false;
+      for (let index = 1; index < colX.length; index += 1) {
+        const overlap = columnBasis - (colX[index] - colX[index - 1]);
+        if (overlap > 0.5) {
+          colX[index - 1] -= overlap / 2;
+          colX[index] += overlap / 2;
+          moved = true;
+        }
+      }
+      for (let index = 0; index < colX.length; index += 1) {
+        colX[index] = Math.min(hi, Math.max(lo, colX[index]));
+      }
+      if (!moved) {
+        break;
+      }
+    }
+    columns.forEach((column, index) => placements.set(column.key, { barX: barX[index], colX: colX[index] }));
+    return placements;
+  }, [isYear, barCount, trackWidth, columnBasis, columns]);
+
+  const cellStyle = (column: ChartColumn): CSSProperties => {
+    const placement = isYear ? yearPlacements.get(column.key) : undefined;
+    if (!placement) {
+      return { flex: columnFlex };
+    }
+    return { position: "absolute", left: placement.colX - columnBasis / 2, width: columnBasis };
+  };
 
   // In month view the columns don't stretch, so pin the scrolling track to their exact total width:
   // the plot, gridlines, headers, and value rows all end at the last month (nothing trailing off to
@@ -155,6 +227,20 @@ function NetWorthChart({
     range === "month"
       ? columns.length * columnBasis + Math.max(0, columns.length - 1) * COLUMN_GAP_PX
       : null;
+  // Years view: the track fills the width (with a scroll floor so the bars stay readable).
+  const trackStyle: CSSProperties | undefined = isYear
+    ? // `max(100%, …)` keeps the track at least as wide as the card (an inline min-width would
+      // otherwise replace the stylesheet's `min-width: 100%`), scrolling only when bars need more.
+      { minWidth: `max(100%, ${barCount * YEAR_MIN_BAR_PX + columnBasis}px)` }
+    : monthTrackWidth !== null
+      ? { width: monthTrackWidth, minWidth: monthTrackWidth }
+      : undefined;
+  // Years view: the bars sit inside the plot with half a column of room each side; gridlines and
+  // row tints still run edge to edge.
+  const barsStyle: CSSProperties | undefined = isYear
+    ? { boxSizing: "border-box", paddingInline: columnBasis / 2 }
+    : undefined;
+  const pinnedRowClass = isYear ? " networth-row--pinned" : "";
 
   const commitCell = (accountId: string, month: string, wasExplicit: boolean, raw: string) => {
     const parsed = parseAmount(raw);
@@ -187,7 +273,9 @@ function NetWorthChart({
           <div>
             <h2>Net worth by month</h2>
             <p className="networth-chart-subtitle">
-              Enter each account's end-of-month balance below. Blanks carry the last entered balance forward.
+              {isYear
+                ? "End-of-month balances for the first and last month shown and for the last month of each year."
+                : "Enter each account's end-of-month balance below. Blanks carry the last entered balance forward."}
             </p>
           </div>
           <div className="import-shell__chart-tools">
@@ -270,7 +358,8 @@ function NetWorthChart({
             <div className="import-shell__chart-scroll" ref={scrollRef}>
               <div
                 className="import-shell__chart-track"
-                style={monthTrackWidth !== null ? { width: monthTrackWidth, minWidth: monthTrackWidth } : undefined}
+                style={trackStyle}
+                ref={trackRef}
               >
                 <div className="import-shell__chart-plot">
                   {hasData ? (
@@ -284,30 +373,43 @@ function NetWorthChart({
                       ))}
                       <div className="import-shell__baseline" style={{ top: `${baselinePct}%` }} />
 
-                      <div className="import-shell__chart-bars">
-                        {columns.map((column) => (
-                          <div
-                            key={column.key}
-                            className={`networth-bar-group ${
-                              column.bars.length > 1 ? "networth-bar-group--multi" : ""
-                            }`}
-                            style={{ flex: columnFlex }}
-                          >
-                            {column.bars.map((point) => (
+                      <div className="import-shell__chart-bars" style={barsStyle}>
+                        {isYear ? (
+                          // One group holding every month's bar; only the months with a value
+                          // column below get a total above them (the rest would just crowd).
+                          <div className="networth-bar-group networth-bar-group--multi" style={{ flex: "1 1 100%" }}>
+                            {monthlyBars.map((point, index) => (
                               <BarColumn
                                 key={point.month}
                                 point={point}
                                 baselinePct={baselinePct}
                                 scale={scale}
-                                // A month column shows the net total above its single bar; a year's
-                                // packed bars would overlap, so their totals live in the grid below.
-                                showTotal={column.bars.length === 1}
+                                showTotal={labelledBars.has(index)}
+                                // Bars without a value column below are dimmed so the labelled
+                                // ones (the months the table reports) stand out.
+                                muted={!labelledBars.has(index)}
                                 onShow={showTooltip}
                                 onHide={hideTooltip}
                               />
                             ))}
                           </div>
-                        ))}
+                        ) : (
+                          columns.map((column) => (
+                            <div key={column.key} className="networth-bar-group" style={{ flex: columnFlex }}>
+                              {column.bars.map((point) => (
+                                <BarColumn
+                                  key={point.month}
+                                  point={point}
+                                  baselinePct={baselinePct}
+                                  scale={scale}
+                                  showTotal
+                                  onShow={showTooltip}
+                                  onHide={hideTooltip}
+                                />
+                              ))}
+                            </div>
+                          ))
+                        )}
                       </div>
                     </>
                   ) : (
@@ -317,14 +419,40 @@ function NetWorthChart({
                   )}
                 </div>
 
-                <div className="import-shell__x-axis">
+                <div
+                  className={`import-shell__x-axis${pinnedRowClass}`}
+                  style={isYear ? { height: YEAR_AXIS_ROW_HEIGHT, marginTop: 0 } : undefined}
+                >
+                  {isYear && (
+                    // Guides from each labelled bar's base down to its column header (an elbow when
+                    // the column had to shift sideways to make room).
+                    <svg
+                      className="networth-year-guides"
+                      width="100%"
+                      height={YEAR_GUIDE_PX}
+                      aria-hidden="true"
+                    >
+                      {columns.map((column) => {
+                        const placement = yearPlacements.get(column.key);
+                        if (!placement) {
+                          return null;
+                        }
+                        const { barX, colX } = placement;
+                        const d =
+                          Math.abs(barX - colX) < 0.5
+                            ? `M${barX} 0V${YEAR_GUIDE_PX}`
+                            : `M${barX} 0V5H${colX}V${YEAR_GUIDE_PX}`;
+                        return <path key={column.key} d={d} />;
+                      })}
+                    </svg>
+                  )}
                   {columns.map((column) => {
                     const month = column.month;
                     return (
                       <div
                         key={column.key}
                         className="import-shell__x-axis-label networth-month-head"
-                        style={{ flex: columnFlex }}
+                        style={isYear ? { ...cellStyle(column), top: YEAR_GUIDE_PX + 2 } : cellStyle(column)}
                       >
                         {column.editable && month ? (
                           editingMonth === month ? (
@@ -373,16 +501,18 @@ function NetWorthChart({
                       key={group.meta.id}
                       group={group}
                       columns={columns}
-                      columnFlex={columnFlex}
+                      cellStyle={cellStyle}
+                      pinned={isYear}
                       commitCell={commitCell}
                     />
                   ))}
-                  <div className="import-shell__totals-row import-shell__totals-row--net">
+                  <div className={`import-shell__totals-row import-shell__totals-row--net${pinnedRowClass}`}>
+                    {isYear && <span className="networth-row-strut" aria-hidden="true" />}
                     {netPerColumn.map((value, index) => (
                       <div
                         key={columns[index].key}
                         className="import-shell__totals-cell import-shell__totals-cell--net networth-readonly-cell"
-                        style={{ flex: columnFlex }}
+                        style={cellStyle(columns[index])}
                       >
                         {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
                       </div>
@@ -435,15 +565,17 @@ type BarColumnProps = {
   point: NetWorthPoint;
   baselinePct: number;
   scale: DivergingScale;
-  // Whether to pin the net total above the bar (month columns) or leave it off (packed year bars).
+  // Whether to pin the net total above the bar (every month column, and the labelled year bars).
   showTotal: boolean;
+  // Years view: draw this bar dimmed (it has no value column beneath it).
+  muted?: boolean;
   onShow: (point: NetWorthPoint, rect: DOMRect, topPct: number) => void;
   onHide: (point: NetWorthPoint) => void;
 };
 
 // One stacked bar for a single point in time: assets stack up from the baseline, liabilities down.
-// Used both for a month column's lone bar and for each of a year column's packed monthly bars.
-function BarColumn({ point, baselinePct, scale, showTotal, onShow, onHide }: BarColumnProps) {
+// Used both for a month column's lone bar and for each bar in Years view's flat run of months.
+function BarColumn({ point, baselinePct, scale, showTotal, muted = false, onShow, onHide }: BarColumnProps) {
   const positiveSegments = point.segments.filter((segment) => segment.value > 0);
   const negativeSegments = point.segments.filter((segment) => segment.value < 0);
 
@@ -503,6 +635,7 @@ function BarColumn({ point, baselinePct, scale, showTotal, onShow, onHide }: Bar
             width: "100%",
             background: segment.color,
             borderRadius,
+            opacity: muted ? 0.55 : undefined,
           }}
           aria-hidden="true"
         />
@@ -540,14 +673,16 @@ function GroupLabels({ group }: { group: BucketGroup }) {
 type GroupValuesProps = {
   group: BucketGroup;
   columns: ChartColumn[];
-  columnFlex: string;
+  // Per-column cell positioning: a fixed flex basis (Months) or placed under its bar (Years).
+  cellStyle: (column: ChartColumn) => CSSProperties;
+  pinned: boolean;
   commitCell: (accountId: string, month: string, wasExplicit: boolean, raw: string) => boolean;
 };
 
 // One bucket's value rows in the track: a balance cell per account/column, then the bucket's
-// (read-only) per-column total. A month column's account cell is an editable input; a year column's
-// is a read-only year-end balance (balances are entered in Months view).
-function GroupValues({ group, columns, columnFlex, commitCell }: GroupValuesProps) {
+// (read-only) per-column total. A month column's account cell is an editable input; in Years view
+// the cell is the read-only balance for that labelled month (balances are entered in Months view).
+function GroupValues({ group, columns, cellStyle, pinned, commitCell }: GroupValuesProps) {
   const accent = { "--bucket": group.meta.color } as CSSProperties;
 
   return (
@@ -557,19 +692,20 @@ function GroupValues({ group, columns, columnFlex, commitCell }: GroupValuesProp
           key={account.accountId}
           className={`import-shell__totals-row import-shell__totals-row--item ${
             accountIndex === 0 ? "import-shell__totals-row--section-start" : ""
-          }`}
+          }${pinned ? " networth-row--pinned" : ""}`}
           style={accent}
         >
+          {pinned && <span className="networth-row-strut" aria-hidden="true" />}
           {account.cells.map((cell, cellIndex) => {
             const column = columns[cellIndex];
-            // Year columns are a read-only overview: the year-end balance as plain text ("—" if the
-            // account has no balance yet that year).
+            // Year-view columns are read-only: the balance as plain text ("—" if the account has no
+            // balance yet by that month).
             if (!column.editable || !column.month) {
               return (
                 <div
                   key={column.key}
                   className="import-shell__totals-cell networth-readonly-cell"
-                  style={{ flex: columnFlex }}
+                  style={cellStyle(column)}
                 >
                   {cell.value === null ? "—" : wholeCurrencyFormatter.format(cell.value)}
                 </div>
@@ -610,7 +746,7 @@ function GroupValues({ group, columns, columnFlex, commitCell }: GroupValuesProp
               <div
                 key={column.key}
                 className="import-shell__totals-cell networth-input-cell"
-                style={{ flex: columnFlex }}
+                style={cellStyle(column)}
               >
                 <input
                   // Remount (resetting defaultValue) whenever the stored balance for this cell changes.
@@ -632,12 +768,16 @@ function GroupValues({ group, columns, columnFlex, commitCell }: GroupValuesProp
           })}
         </div>
       ))}
-      <div className="import-shell__totals-row import-shell__totals-row--bucket" style={accent}>
+      <div
+        className={`import-shell__totals-row import-shell__totals-row--bucket${pinned ? " networth-row--pinned" : ""}`}
+        style={accent}
+      >
+        {pinned && <span className="networth-row-strut" aria-hidden="true" />}
         {group.totalPerColumn.map((value, index) => (
           <div
             key={columns[index].key}
             className="import-shell__totals-cell import-shell__totals-cell--bucket networth-readonly-cell"
-            style={{ flex: columnFlex }}
+            style={cellStyle(columns[index])}
           >
             {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
           </div>

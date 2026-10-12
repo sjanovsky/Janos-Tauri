@@ -124,6 +124,7 @@ function NetWorthPage() {
         editable: true,
         month,
         removable: removableMonths.has(month),
+        barIndex: null,
       })),
     [months, view.series, removableMonths],
   );
@@ -431,6 +432,7 @@ function NetWorthPage() {
             hasData={hasData}
             range={range}
             columns={columns}
+            monthlyBars={yearly?.monthlySeries ?? []}
             scale={scale}
             groups={gridGroups}
             netPerColumn={gridNetPerColumn}

@@ -170,32 +170,31 @@ describe("buildNetWorthYearlyView", () => {
     { accountId: "a401k", month: "2026-01", amount: 1200 },
   ];
 
-  it("gives each year a column of monthly bars that rolls up to the year-end balance", () => {
+  it("labels the first month, each year-end, and the last month against a flat run of monthly bars", () => {
     const yearly = buildNetWorthYearlyView(buckets, accounts, balances, ["2025-06", "2026-03"], "2026-03");
 
-    // One column per touched year; both are read-only (balances are entered in Months view).
-    expect(yearly.columns.map((column) => column.key)).toEqual(["2025", "2026"]);
+    // Jun 2025 (first month in the grid), Dec 2025 (year-end), Mar 2026 (last / current-year end).
+    expect(yearly.columns.map((column) => column.key)).toEqual(["2025-06", "2025-12", "2026-03"]);
+    expect(yearly.columns.map((column) => column.barIndex)).toEqual([0, 6, 9]);
     expect(yearly.columns.every((column) => !column.editable && column.month === null)).toBe(true);
 
-    // 2025 is a full year (12 bars); the current year stops at nowMonth (Jan–Mar = 3 bars).
-    expect(yearly.columns[0].bars).toHaveLength(12);
-    expect(yearly.columns[1].bars).toHaveLength(3);
-
-    // January 2025 predates the first balance, so that bar has no segments...
-    expect(yearly.columns[0].bars[0].segments).toEqual([]);
-    // ...while June 2025 (index 5) carries both accounts.
-    expect(yearly.columns[0].bars[5].segments).toEqual([
+    // The bars start at the first month (not January) and the current year stops at nowMonth:
+    // Jun–Dec 2025 (7) + Jan–Mar 2026 (3) = 10 bars.
+    expect(yearly.monthlySeries).toHaveLength(10);
+    expect(yearly.monthlySeries[0].month).toBe("2025-06");
+    expect(yearly.monthlySeries[0].segments).toEqual([
       { bucketId: "retirement", label: "Retirement", color: "#111", value: 1000 },
       { bucketId: "cash", label: "Cash", color: "#222", value: 500 },
     ]);
 
-    // Grid folds to each year-end: 2025 = Dec (1000 + 500), 2026 = Mar (carried 1200 + 500).
-    expect(yearly.netPerColumn).toEqual([1500, 1700]);
+    // Grid values come from those months: Jun 2025 and Dec 2025 = 1000 + 500, Mar 2026 = 1200 + 500.
+    expect(yearly.netPerColumn).toEqual([1500, 1500, 1700]);
     const retirement = yearly.groups.find((group) => group.meta.id === "retirement");
-    expect(retirement?.totalPerColumn).toEqual([1000, 1200]);
-    expect(retirement?.accounts[0].cells).toEqual([
-      { month: "2025", value: 1000, explicit: false },
-      { month: "2026", value: 1200, explicit: false },
-    ]);
+    expect(retirement?.totalPerColumn).toEqual([1000, 1000, 1200]);
+  });
+
+  it("does not repeat a month that is both the last month and a year-end", () => {
+    const yearly = buildNetWorthYearlyView(buckets, accounts, balances, ["2025-06"], "2025-12");
+    expect(yearly.columns.map((column) => column.key)).toEqual(["2025-06", "2025-12"]);
   });
 });

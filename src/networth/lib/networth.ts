@@ -51,6 +51,9 @@ export type ChartColumn = {
   editable: boolean;
   month: string | null;
   removable: boolean;
+  // Years view only: this column's position among the flat run of monthly bars, so its balances sit
+  // beneath (and its total is labelled above) that bar. Null in Months view.
+  barIndex: number | null;
 };
 
 // A single account's cell in the grid. `value` is the balance shown after carry-forward (null when
@@ -296,11 +299,12 @@ export function yearViewMonths(
   });
 }
 
-// The Years-view counterpart to buildNetWorthView: one column per year. Each column's `bars` are the
-// year's monthly net-worth points (carried forward, so a year reads as a 12-step trajectory), while
-// the grid `groups`/`netPerColumn` fold down to the year-end balance (read-only — balances are
-// entered in Months view). `monthlySeries` is every bar flattened, so the diverging scale is sized
-// from the monthly points, not just the year-end values.
+// The Years-view counterpart to buildNetWorthView. The chart is one flat run of monthly bars (from
+// the earliest month in the grid through the last month shown), and the grid holds a read-only
+// column for just the months worth labelling: the first and last month in the graph plus the last
+// month of every year (December, or the latest month for the current year). Each column carries the
+// `barIndex` of its bar so the grid can sit directly beneath it. `monthlySeries` is every bar, which
+// also sizes the diverging scale.
 export function buildNetWorthYearlyView(
   buckets: NetWorthBucketRecord[],
   accounts: AccountRecord[],
@@ -309,42 +313,58 @@ export function buildNetWorthYearlyView(
   nowMonth: string,
 ): { columns: ChartColumn[]; groups: BucketGroup[]; netPerColumn: number[]; monthlySeries: NetWorthPoint[] } {
   const yearSpans = yearViewMonths(yearsFromMonths(months), nowMonth);
-  const expandedMonths = yearSpans.flatMap((span) => span.monthKeys);
+  // The graph starts at the earliest month in the grid (not January of that year). `months` is
+  // ascending, so its first entry is the start.
+  const firstMonth = months.length > 0 ? months[0] : null;
+  const expandedMonths = yearSpans
+    .flatMap((span) => span.monthKeys)
+    .filter((month) => firstMonth === null || month >= firstMonth);
   const monthlyView = buildNetWorthView(buckets, accounts, balances, expandedMonths);
 
   const indexByMonth = new Map(expandedMonths.map((month, index) => [month, index]));
-  const pointByMonth = new Map(monthlyView.series.map((point) => [point.month, point]));
 
-  const columns: ChartColumn[] = yearSpans.map((span) => ({
-    key: span.year,
-    label: span.year,
-    bars: span.monthKeys
-      .map((month) => pointByMonth.get(month))
-      .filter((point): point is NetWorthPoint => Boolean(point)),
-    editable: false,
-    month: null,
-    removable: false,
-  }));
+  // Bar indices that get a grid column: first, every year-end, and last (deduped, ascending).
+  const shown = new Set<number>();
+  if (expandedMonths.length > 0) {
+    shown.add(0);
+    shown.add(expandedMonths.length - 1);
+  }
+  yearSpans.forEach((span) => {
+    const index = indexByMonth.get(span.endMonth);
+    if (index !== undefined) {
+      shown.add(index);
+    }
+  });
+  const shownIndices = Array.from(shown).sort((a, b) => a - b);
 
-  // The expanded-month index each year rolls up to (its year-end month).
-  const endIndices = yearSpans.map((span) => indexByMonth.get(span.endMonth) ?? 0);
+  const columns: ChartColumn[] = shownIndices.map((index) => {
+    const month = expandedMonths[index];
+    return {
+      key: month,
+      label: formatMonthAxis(month),
+      bars: [monthlyView.series[index]],
+      editable: false,
+      month: null,
+      removable: false,
+      barIndex: index,
+    };
+  });
 
   const groups: BucketGroup[] = monthlyView.groups.map((group) => ({
     meta: group.meta,
     accounts: group.accounts.map((account) => ({
       accountId: account.accountId,
       name: account.name,
-      // One cell per year, keyed by the year, holding that year's year-end carried value.
-      cells: endIndices.map((monthIndex, columnIndex) => ({
-        month: yearSpans[columnIndex].year,
-        value: account.cells[monthIndex]?.value ?? null,
+      cells: shownIndices.map((index) => ({
+        month: expandedMonths[index],
+        value: account.cells[index]?.value ?? null,
         explicit: false,
       })),
     })),
-    totalPerColumn: endIndices.map((monthIndex) => group.totalPerColumn[monthIndex] ?? 0),
+    totalPerColumn: shownIndices.map((index) => group.totalPerColumn[index] ?? 0),
   }));
 
-  const netPerColumn = endIndices.map((monthIndex) => monthlyView.netPerColumn[monthIndex] ?? 0);
+  const netPerColumn = shownIndices.map((index) => monthlyView.netPerColumn[index] ?? 0);
 
   return { columns, groups, netPerColumn, monthlySeries: monthlyView.series };
 }

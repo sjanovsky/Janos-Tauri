@@ -2974,3 +2974,30 @@ textarea.bucket-row__name {
   background: #b91c1c;
   border-color: #b91c1c;
 }
+
+/* Years view: value columns are placed absolutely under their bar rather than flowing, so each row
+   holds a zero-width strut to keep the row's height. */
+.networth-row--pinned {
+  position: relative;
+}
+
+.networth-row-strut {
+  display: block;
+  width: 0;
+  height: var(--totals-row-h);
+}
+
+/* Years view: hairline guides from each labelled bar down to its column header. */
+.networth-year-guides {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.networth-year-guides path {
+  fill: none;
+  stroke: var(--chart-baseline);
+  stroke-width: 1;
+}
