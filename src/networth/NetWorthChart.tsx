@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { DivergingScale } from "../spending/lib/chartScale";
 import { abbreviateCurrency, currencyFormatter, wholeCurrencyFormatter } from "../spending/lib/format";
@@ -14,12 +14,12 @@ import {
 // headers, and the balance cells so each column stays aligned top to bottom). These budget that
 // width: roughly one digit's worth of the cell font (0.82rem, tabular-nums) per character of the
 // widest value, plus the cell's padding and divider. Counting "$" and "," at the wider digit width
-// leaves a little slack so the largest value never truncates. Kept tight so month columns hug their
-// text (no wasted space around the numbers) and more months fit before the chart scrolls.
+// leaves a little slack so the largest value never truncates. The padding gives the numbers some
+// breathing room so adjacent month columns don't feel cramped.
 const CHAR_WIDTH_PX = 7.5;
-const COLUMN_PADDING_PX = 8;
+const COLUMN_PADDING_PX = 28;
 // Floor so a month column never gets narrower than its header ("Oct'26", with a remove button).
-const MIN_COLUMN_BASIS = 60;
+const MIN_COLUMN_BASIS = 76;
 // A year column packs up to twelve monthly bars into one width, so it needs a wider floor than a
 // single value cell would — enough that each month's bar stays visible.
 const YEAR_MIN_COLUMN_BASIS = 104;
@@ -96,6 +96,16 @@ function NetWorthChart({
   const [tooltipAnchor, setTooltipAnchor] = useState<TooltipAnchor | null>(null);
   // Which column's date is currently being edited (its header shows the month picker).
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // When the columns overflow horizontally, start scrolled to the far right so the most recent
+  // months are visible. Re-applied when the range switches or the column count changes.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollLeft = el.scrollWidth;
+    }
+  }, [range, columns.length, hasAccounts]);
 
   // The width every column gets: just enough for the widest value shown anywhere in the grid
   // (account balances, bucket totals, and the Net worth row). In month view columns hold exactly
@@ -257,7 +267,7 @@ function NetWorthChart({
               </div>
             </div>
 
-            <div className="import-shell__chart-scroll">
+            <div className="import-shell__chart-scroll" ref={scrollRef}>
               <div
                 className="import-shell__chart-track"
                 style={monthTrackWidth !== null ? { width: monthTrackWidth, minWidth: monthTrackWidth } : undefined}
