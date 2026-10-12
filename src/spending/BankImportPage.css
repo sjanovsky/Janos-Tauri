@@ -2416,16 +2416,12 @@ textarea.bucket-row__name {
   text-decoration: underline;
 }
 
-/* The "Account" caption in the gutter, aligned with the month-header row (same height + top
-   margin as the x-axis), so it reads as the header of the row-label column. */
-.networth-axis-head {
-  display: flex;
-  align-items: center;
-  height: var(--x-axis-h);
-  margin-top: 0.4rem;
-  padding-left: 0.4rem;
-  color: #6b7280;
-  font-size: 0.78rem;
+/* A year column's header in the x-axis row: a static label (e.g. "2026"), matching the weight of
+   the clickable month label but without the edit/remove affordances. */
+.networth-year-head {
+  padding: 0.1rem 0.25rem;
+  color: inherit;
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
@@ -2541,6 +2537,34 @@ textarea.bucket-row__name {
 .networth-layout .import-shell__x-axis,
 .networth-layout .import-shell__totals-row {
   gap: 2px;
+}
+
+/* A column's bars live in one fixed-width group so they line up with that column's header and cells.
+   A month column holds a single bar (filling the width); a year column packs its months side by
+   side, each taking an equal share, so the year reads as a condensed 12-step trajectory. */
+.networth-bar-group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+  height: 100%;
+}
+
+.networth-bar-group--multi {
+  gap: 1px;
+}
+
+.networth-bar-group .import-shell__bar-col {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A month column's lone bar sits at 70% of the (full-width) column, centred by the group, so the
+   monthly bars read slimmer with breathing room on either side. Year columns keep their packed bars
+   filling the column. */
+.networth-bar-group:not(.networth-bar-group--multi) .import-shell__bar-col {
+  flex: 0 0 70%;
 }
 
 /* Net-worth value cells are inputs or read-only totals, not the spending page's filter buttons, so
@@ -2828,13 +2852,7 @@ textarea.bucket-row__name {
   letter-spacing: 0.03em;
 }
 
-.networth-months__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.networth-months__range {
+.networth-months__controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2922,4 +2940,44 @@ textarea.bucket-row__name {
 .networth-months__delete:hover {
   background: #fee2e2;
   color: #dc2626;
+}
+
+.networth-months__confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.networth-months__confirm-text {
+  color: #6b7280;
+  font-size: 0.78rem;
+}
+
+.networth-months__confirm-btn {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #374151;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.networth-months__confirm-btn:hover {
+  background: #eef2ff;
+  border-color: #818cf8;
+}
+
+.networth-months__confirm-btn--danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: white;
+}
+
+.networth-months__confirm-btn--danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
 }

@@ -7,12 +7,16 @@ import { type ImportPayload } from "./NetWorthImportModal";
 import {
   addMonth,
   buildNetWorthView,
+  buildNetWorthYearlyView,
   currentMonth,
+  formatMonthAxis,
   nextBucketColor,
   sortedUniqueMonths,
   type AccountRecord,
   type BalanceRecord,
+  type ChartColumn,
   type NetWorthBucketRecord,
+  type NetWorthRange,
 } from "./lib/networth";
 
 const DB_ERROR = "Couldn't reach the local database. Make sure the app is running via `npm run tauri dev`.";
@@ -30,6 +34,8 @@ function NetWorthPage() {
   const [extraMonths, setExtraMonths] = useState<string[]>(() => [currentMonth()]);
   // The manage modal is closed when null, otherwise open to the named tab.
   const [manageTab, setManageTab] = useState<NetWorthManageTab | null>(null);
+  // Whether the chart groups its columns by month (editable grid) or by year (read-only overview).
+  const [range, setRange] = useState<NetWorthRange>("month");
   const [dbError, setDbError] = useState<string | null>(null);
 
   const loadBuckets = useCallback(
@@ -108,10 +114,38 @@ function NetWorthPage() {
     [buckets, accounts, balances, months],
   );
 
+  // One editable column per month: a single full-width bar above each month's balance cells.
+  const monthColumns = useMemo<ChartColumn[]>(
+    () =>
+      months.map((month, index) => ({
+        key: month,
+        label: formatMonthAxis(month),
+        bars: [view.series[index]],
+        editable: true,
+        month,
+        removable: removableMonths.has(month),
+      })),
+    [months, view.series, removableMonths],
+  );
+
+  // The Years view is derived from the same balances, so only recompute it while that view is active.
+  const yearly = useMemo(
+    () => (range === "year" ? buildNetWorthYearlyView(buckets, accounts, balances, months, currentMonth()) : null),
+    [range, buckets, accounts, balances, months],
+  );
+
+  // The columns, grid data, and bar series the chart actually renders, chosen by the active range.
+  // `scaleSeries` is what the diverging scale is sized from — the monthly points in both views (a
+  // year's bars are its months), so the y-axis matches the bars regardless of range.
+  const columns = range === "year" ? yearly!.columns : monthColumns;
+  const gridGroups = range === "year" ? yearly!.groups : view.groups;
+  const gridNetPerColumn = range === "year" ? yearly!.netPerColumn : view.netPerColumn;
+  const scaleSeries = range === "year" ? yearly!.monthlySeries : view.series;
+
   const scale = useMemo(
     () =>
       computeDivergingScale(
-        view.series.map((point) => {
+        scaleSeries.map((point) => {
           const positiveTotal = point.segments
             .filter((segment) => segment.value > 0)
             .reduce((sum, segment) => sum + segment.value, 0);
@@ -121,7 +155,7 @@ function NetWorthPage() {
           return { positiveTotal, negativeTotal };
         }),
       ),
-    [view.series],
+    [scaleSeries],
   );
 
   const hasData = balances.length > 0;
@@ -395,12 +429,12 @@ function NetWorthPage() {
           <NetWorthChart
             hasAccounts={accounts.length > 0}
             hasData={hasData}
-            months={months}
-            series={view.series}
+            range={range}
+            columns={columns}
             scale={scale}
-            groups={view.groups}
-            netPerColumn={view.netPerColumn}
-            removableMonths={removableMonths}
+            groups={gridGroups}
+            netPerColumn={gridNetPerColumn}
+            onRangeChange={setRange}
             onSetBalance={handleSetBalance}
             onEditMonth={handleEditMonth}
             onRemoveMonth={handleRemoveMonth}

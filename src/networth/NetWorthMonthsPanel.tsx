@@ -34,6 +34,9 @@ function NetWorthMonthsPanel({
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // The month awaiting delete confirmation, if any. Native window.confirm doesn't work in the
+  // macOS webview, so months that hold balances get an inline confirm step instead.
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const handleAddRange = () => {
     if (!isValidMonth(rangeStart) || !isValidMonth(rangeEnd)) {
@@ -46,15 +49,17 @@ function NetWorthMonthsPanel({
     setRangeEnd("");
   };
 
+  // Empty months delete straight away; months with balances ask for an inline confirmation first.
   const handleDelete = (month: string, count: number) => {
-    if (
-      count > 0 &&
-      !window.confirm(
-        `Delete ${formatMonthLabel(month)}? This removes ${count} entered balance${count === 1 ? "" : "s"}.`,
-      )
-    ) {
+    if (count > 0) {
+      setPendingDelete(month);
       return;
     }
+    onDeleteMonth(month);
+  };
+
+  const confirmDelete = (month: string) => {
+    setPendingDelete(null);
     onDeleteMonth(month);
   };
 
@@ -66,20 +71,14 @@ function NetWorthMonthsPanel({
       </p>
 
       <div className="networth-months__section">
-        <span className="networth-months__section-label">Quick add</span>
-        <div className="networth-months__actions">
+        <span className="networth-months__section-label">Add months</span>
+        <div className="networth-months__controls">
           <button type="button" className="networth-import__button" onClick={onAddBefore}>
             + Before {formatMonthLabel(earliest)}
           </button>
           <button type="button" className="networth-import__button" onClick={onAddAfter}>
             + After {formatMonthLabel(latest)}
           </button>
-        </div>
-      </div>
-
-      <div className="networth-months__section">
-        <span className="networth-months__section-label">Add a range</span>
-        <div className="networth-months__range">
           <input
             type="text"
             className="networth-months__range-input"
@@ -115,18 +114,42 @@ function NetWorthMonthsPanel({
             return (
               <li key={month} className="networth-months__item">
                 <span className="networth-months__item-label">{formatMonthLabel(month)}</span>
-                <span className="networth-months__item-count">
-                  {count > 0 ? `${count} balance${count === 1 ? "" : "s"}` : "empty"}
-                </span>
-                <button
-                  type="button"
-                  className="networth-months__delete"
-                  aria-label={`Delete ${formatMonthLabel(month)}`}
-                  title="Delete this month"
-                  onClick={() => handleDelete(month, count)}
-                >
-                  ×
-                </button>
+                {pendingDelete === month ? (
+                  <div className="networth-months__confirm">
+                    <span className="networth-months__confirm-text">
+                      Delete {count} balance{count === 1 ? "" : "s"}?
+                    </span>
+                    <button
+                      type="button"
+                      className="networth-months__confirm-btn networth-months__confirm-btn--danger"
+                      onClick={() => confirmDelete(month)}
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      className="networth-months__confirm-btn"
+                      onClick={() => setPendingDelete(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="networth-months__item-count">
+                      {count > 0 ? `${count} balance${count === 1 ? "" : "s"}` : "empty"}
+                    </span>
+                    <button
+                      type="button"
+                      className="networth-months__delete"
+                      aria-label={`Delete ${formatMonthLabel(month)}`}
+                      title="Delete this month"
+                      onClick={() => handleDelete(month, count)}
+                    >
+                      ×
+                    </button>
+                  </>
+                )}
               </li>
             );
           })}
