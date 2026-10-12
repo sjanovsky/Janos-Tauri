@@ -1,4 +1,5 @@
 mod db;
+mod networth;
 mod spending;
 
 use db::{init_db, DbState};
@@ -101,6 +102,20 @@ pub fn run() {
             spending::set_bucket_positions,
             spending::delete_bucket,
             spending::delete_category,
+            networth::list_networth_buckets,
+            networth::upsert_networth_bucket,
+            networth::set_networth_bucket_positions,
+            networth::delete_networth_bucket,
+            networth::list_networth_accounts,
+            networth::upsert_networth_account,
+            networth::set_networth_account_placement,
+            networth::set_networth_account_positions,
+            networth::delete_networth_account,
+            networth::list_networth_balances,
+            networth::set_networth_balance,
+            networth::rename_networth_month,
+            networth::delete_networth_month,
+            networth::import_networth,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

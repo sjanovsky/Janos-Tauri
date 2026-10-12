@@ -10,5 +10,6 @@ pub struct DbState(pub Mutex<Connection>);
 pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     crate::spending::schema::migrate(conn)?;
+    crate::networth::schema::migrate(conn)?;
     Ok(())
 }

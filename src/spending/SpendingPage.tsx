@@ -959,9 +959,7 @@ function SpendingPage() {
             onToggleBucketSegment={toggleBucketSegment}
             onToggleCategoryFilter={toggleCategoryFilter}
             onToggleBucketFilter={toggleBucketFilter}
-            onOpenUpload={() => setManageTab("upload")}
             onOpenSettings={() => setManageTab("buckets")}
-            onOpenBankSettings={() => setManageTab("banks")}
           />
 
           <TransactionList

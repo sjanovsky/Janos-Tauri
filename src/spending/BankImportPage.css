@@ -13,7 +13,7 @@
   align-items: flex-end;
   gap: 1.5rem;
   padding: 0.6rem 1.5rem 0;
-  background: #065f46;
+  background: #000000;
 }
 
 .import-shell__brand {
@@ -697,31 +697,6 @@
   gap: 0.6rem;
 }
 
-/* Upload pill in the chart tools; opens the bank-report upload modal. */
-.import-shell__upload-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  height: 34px;
-  padding: 0 0.85rem;
-  border: 1px solid #d1d5db;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #374151;
-  font-size: 0.85rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.import-shell__upload-button:hover,
-.import-shell__upload-button:focus-visible {
-  border-color: #818cf8;
-  background: #eef2ff;
-  color: #4f46e5;
-}
-
 /* Gear button in the chart tools; opens the buckets & categories modal (where spending
    exclusions now live). */
 .import-shell__settings-button {
@@ -741,30 +716,6 @@
 
 .import-shell__settings-button:hover,
 .import-shell__settings-button:focus-visible {
-  border-color: #818cf8;
-  background: #eef2ff;
-  color: #4f46e5;
-}
-
-.import-shell__bank-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  height: 34px;
-  padding: 0 0.8rem;
-  border: 1px solid #d1d5db;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #374151;
-  font-size: 0.85rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.import-shell__bank-button:hover,
-.import-shell__bank-button:focus-visible {
   border-color: #818cf8;
   background: #eef2ff;
   color: #4f46e5;
@@ -2196,7 +2147,7 @@ textarea.bucket-row__name {
      tab clear of the close button, which sits on this bar. */
   margin: -1.5rem -1.5rem 1.25rem;
   padding: 0.6rem 3rem 0 1.5rem;
-  background: #e9eefb;
+  background: #b8f4dc;
 }
 
 .manage-modal__tab {
@@ -2391,4 +2342,584 @@ textarea.bucket-row__name {
     flex: none;
     min-height: 420px;
   }
+}
+
+/* ============================================================================
+   Net Worth page
+   The chart reuses the spending chart classes (.import-shell__chart-*, bars,
+   y/x axes, tooltip). Below are the styles unique to Net Worth: the vertical
+   page layout, the editable monthly-balance grid, and the add-month control.
+   ============================================================================ */
+
+.networth-layout {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* A net-worth tooltip adds a "Net worth" summary line under the bucket rows. */
+.import-shell__tooltip-row--net {
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.networth-chart-subtitle {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+/* The "Add month" button adds a single empty column; the user edits its date afterward. */
+.networth-add-month {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: white;
+  box-shadow: none;
+  color: #4b5563;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.networth-add-month:hover,
+.networth-add-month:focus-visible {
+  border-color: #4f46e5;
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.06);
+}
+
+.networth-add-month__plus {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* An inline text button for the empty-state call to action. */
+.networth-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: #4f46e5;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* The "Account" caption in the gutter, aligned with the month-header row (same height + top
+   margin as the x-axis), so it reads as the header of the row-label column. */
+.networth-axis-head {
+  display: flex;
+  align-items: center;
+  height: var(--x-axis-h);
+  margin-top: 0.4rem;
+  padding-left: 0.4rem;
+  color: #6b7280;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* Centered hint shown in the plot area before any balance is entered. */
+.networth-plot-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  color: var(--chart-muted, #898781);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Month column header (in the x-axis row): a clickable date, optionally with a remove button, or
+   the inline month/year editor while being changed. overflow is visible so the editor can breathe. */
+.networth-month-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.networth-month-head__display {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.networth-month-head__label {
+  padding: 0.1rem 0.25rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.networth-month-head__label:hover,
+.networth-month-head__label:focus-visible {
+  border-color: #d1d5db;
+  color: #4f46e5;
+}
+
+.networth-month-head__remove {
+  padding: 0;
+  width: 15px;
+  height: 15px;
+  line-height: 13px;
+  border: 0;
+  border-radius: 50%;
+  background: #f3f4f6;
+  box-shadow: none;
+  color: #9ca3af;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.networth-month-head__remove:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Inline column-date editor: a month dropdown plus a year field. Kept compact (and shrinkable)
+   so it fits within a month column even when the columns are at their minimum width. */
+.networth-month-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  max-width: 100%;
+}
+
+.networth-month-editor__month,
+.networth-month-editor__year {
+  box-sizing: border-box;
+  padding: 0.15rem 0.15rem;
+  border: 1px solid #4f46e5;
+  border-radius: 5px;
+  background: white;
+  color: #111827;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.networth-month-editor__month {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.networth-month-editor__year {
+  flex: 0 0 auto;
+  width: 3rem;
+  text-align: center;
+}
+
+.networth-month-editor__month:focus,
+.networth-month-editor__year:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+/* Pack the month columns tightly so more months fit and each bar nearly spans its column, leaving
+   only a hairline between neighbours. The bars, month headers, and value rows share this one gap so
+   every month stays aligned top to bottom. (Scoped to the net-worth grid; the spending chart keeps
+   its wider spacing.) */
+.networth-layout .import-shell__chart-bars,
+.networth-layout .import-shell__x-axis,
+.networth-layout .import-shell__totals-row {
+  gap: 2px;
+}
+
+/* Net-worth value cells are inputs or read-only totals, not the spending page's filter buttons, so
+   suppress that hover/column highlight; each row's bucket tint still shows through. */
+.networth-layout .import-shell__totals-cell:hover {
+  background: none;
+  box-shadow: none;
+}
+
+/* Likewise the gutter row labels are static here: no pointer, and hover keeps the base tint. */
+.networth-layout .import-shell__totals-label {
+  cursor: default;
+}
+
+.networth-layout .import-shell__totals-label--item:hover {
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 10%, white);
+}
+
+.networth-layout .import-shell__totals-label--bucket:hover {
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 18%, white);
+}
+
+/* A balance cell holds an editable input that fills it and reads like plain text until focused. */
+.networth-input-cell {
+  display: flex;
+  align-items: center;
+  padding: 1px;
+  line-height: normal;
+  overflow: visible;
+  cursor: default;
+}
+
+.networth-cell-input {
+  width: 100%;
+  height: calc(var(--totals-row-h) - 2px);
+  box-sizing: border-box;
+  padding: 0 0.2rem;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  box-shadow: none;
+  color: #111827;
+  font: inherit;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.networth-cell-input::placeholder {
+  color: #9b9a94;
+  font-style: italic;
+}
+
+.networth-cell-input:hover {
+  border-color: rgba(79, 70, 229, 0.3);
+}
+
+.networth-cell-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  background: white;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+/* Bucket-total and Net rows are display-only. */
+.networth-readonly-cell {
+  cursor: default;
+}
+
+/* --- Paste-from-spreadsheet import modal --- */
+
+.networth-import {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.networth-import__intro {
+  margin: 0;
+  color: #4b5563;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.networth-import__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  resize: vertical;
+}
+
+.networth-import__textarea:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+/* The editable detected-months strip. */
+.networth-import__months {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.networth-import__months-label,
+.networth-import__row--head {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.networth-import__months-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.networth-import__month input {
+  width: 5.5rem;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  color: #111827;
+  font: inherit;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.networth-import__month input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.networth-import__month--invalid input {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* The account → bucket mapping rows, laid out as a light table. */
+.networth-import__rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.networth-import__row {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(6rem, 1fr) minmax(9rem, 1.2fr) 3.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.6rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.networth-import__row:first-child {
+  border-top: 0;
+}
+
+.networth-import__row--head {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  background: #f8fafc;
+}
+
+.networth-import__row--excluded {
+  opacity: 0.45;
+}
+
+/* The read-only spreadsheet row label (what was pasted); the account is chosen via the pill. */
+.networth-import__label {
+  overflow: hidden;
+  color: #111827;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The account pill sits left-aligned in its grid cell (not stretched). */
+.networth-import__row > .import-shell__category-pill-wrap {
+  justify-self: start;
+}
+
+.networth-import__row-count {
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.networth-import__skipped {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.networth-import__skipped em {
+  font-style: normal;
+  color: #9ca3af;
+}
+
+.networth-import__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.networth-import__summary {
+  margin-right: auto;
+  color: #4b5563;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.networth-import__button {
+  padding: 0.55rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #374151;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.networth-import__button:hover {
+  background: #eef2ff;
+  border-color: #818cf8;
+}
+
+.networth-import__button--primary {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: white;
+}
+
+.networth-import__button--primary:hover {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+.networth-import__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.networth-import__error {
+  margin: 0;
+  color: #dc2626;
+  font-size: 0.82rem;
+}
+
+/* --- Months management tab --- */
+
+.networth-months {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.networth-months__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.networth-months__section-label {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.networth-months__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.networth-months__range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.networth-months__range-input {
+  width: 7rem;
+  box-sizing: border-box;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: white;
+  color: #111827;
+  font: inherit;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.networth-months__range-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.networth-months__range-to {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.networth-months__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 16rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.networth-months__item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.7rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.networth-months__item:first-child {
+  border-top: 0;
+}
+
+.networth-months__item-label {
+  color: #111827;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.networth-months__item-count {
+  margin-left: auto;
+  color: #9ca3af;
+  font-size: 0.78rem;
+}
+
+.networth-months__delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #f3f4f6;
+  box-shadow: none;
+  color: #9ca3af;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.networth-months__delete:hover {
+  background: #fee2e2;
+  color: #dc2626;
 }
