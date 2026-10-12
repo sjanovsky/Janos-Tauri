@@ -1,6 +1,7 @@
 mod db;
 mod networth;
 mod spending;
+mod taxes;
 
 use db::{init_db, DbState};
 use rusqlite::Connection;
@@ -116,6 +117,12 @@ pub fn run() {
             networth::rename_networth_month,
             networth::delete_networth_month,
             networth::import_networth,
+            taxes::get_taxes_data,
+            taxes::add_taxes_year,
+            taxes::delete_taxes_year,
+            taxes::set_taxes_household_value,
+            taxes::upsert_taxes_item,
+            taxes::delete_taxes_item,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

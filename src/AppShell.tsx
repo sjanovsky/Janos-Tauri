@@ -1,13 +1,15 @@
 import { useState } from "react";
 import SpendingPage from "./spending/SpendingPage";
 import NetWorthPage from "./networth/NetWorthPage";
+import TaxesPage from "./taxes/TaxesPage";
 import "./spending/BankImportPage.css";
 
-type View = "spending" | "networth";
+type View = "spending" | "networth" | "taxes";
 
 const TABS: { id: View; label: string }[] = [
   { id: "spending", label: "Spending" },
   { id: "networth", label: "Net Worth" },
+  { id: "taxes", label: "Taxes" },
 ];
 
 // App-level shell: the Janos top bar with one tab per page. Each tab swaps the page rendered
@@ -33,7 +35,9 @@ function AppShell() {
       </header>
 
       <main className="import-shell__content">
-        {view === "spending" ? <SpendingPage /> : <NetWorthPage />}
+        {view === "spending" && <SpendingPage />}
+        {view === "networth" && <NetWorthPage />}
+        {view === "taxes" && <TaxesPage />}
       </main>
     </div>
   );
