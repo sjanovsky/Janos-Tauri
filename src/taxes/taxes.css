@@ -8,44 +8,6 @@
   width: 100%;
 }
 
-.taxes-header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.25rem;
-}
-
-.taxes-header h1 {
-  margin: 0;
-  text-align: left;
-  font-size: 1.5rem;
-}
-
-.taxes-header p {
-  margin: 0.15rem 0 0;
-  color: #6b7280;
-}
-
-.taxes-years {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.taxes-years .range-pill {
-  box-shadow: none;
-  color: #374151;
-  font-weight: 600;
-}
-
-.taxes-years .range-pill--active {
-  color: white;
-}
-
 .taxes-body {
   display: grid;
   flex: 1;
@@ -110,6 +72,59 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Colored banner across the top of an input card. Pulls out to the card's edges and rounds with it. */
+.taxes-card__header--banner {
+  align-items: center;
+  margin: -1rem -1.2rem 0.9rem;
+  padding: 0.85rem 1.2rem;
+  border-bottom: 1px solid var(--tone-border);
+  border-radius: 17px 17px 0 0;
+  background: var(--tone-bg);
+  /* A strip of the section's solid color, the same one its waterfall bar starts from. */
+  box-shadow: inset 0 4px 0 var(--tone-accent);
+}
+
+.taxes-card__header--banner h2,
+.taxes-card__header--banner .taxes-card__total {
+  color: var(--tone-strong);
+}
+
+.taxes-card__header--banner p {
+  color: var(--tone-muted);
+}
+
+.taxes-card__header--banner .taxes-card__total {
+  font-size: 1.25rem;
+}
+
+.taxes-tone--green {
+  --tone-bg: #ecfdf5;
+  --tone-border: #a7f3d0;
+  --tone-strong: #065f46;
+  --tone-muted: #047857;
+}
+
+.taxes-tone--blue {
+  --tone-bg: #eff6ff;
+  --tone-border: #bfdbfe;
+  --tone-strong: #1e3a8a;
+  --tone-muted: #1d4ed8;
+}
+
+.taxes-tone--amber {
+  --tone-bg: #fffbeb;
+  --tone-border: #fde68a;
+  --tone-strong: #78350f;
+  --tone-muted: #b45309;
+}
+
+.taxes-tone--violet {
+  --tone-bg: #f5f3ff;
+  --tone-border: #ddd6fe;
+  --tone-strong: #4c1d95;
+  --tone-muted: #6d28d9;
+}
+
 .taxes-empty {
   margin: 0.25rem 0;
   color: #6b7280;
@@ -156,8 +171,7 @@
 
 /* --- Buttons --- */
 
-.taxes-card button,
-.taxes-years .taxes-link-btn {
+.taxes-card button {
   box-shadow: none;
 }
 
@@ -181,6 +195,7 @@
 }
 
 .taxes-link-btn {
+  margin-top: 0.6rem;
   padding: 0.3rem 0.1rem;
   border: 0;
   background: transparent;
@@ -191,29 +206,6 @@
 
 .taxes-link-btn:hover {
   text-decoration: underline;
-}
-
-.taxes-confirm {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.82rem;
-  color: #374151;
-}
-
-.taxes-confirm__btn {
-  padding: 0.25rem 0.6rem;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: white;
-  box-shadow: none;
-  font-size: 0.8rem;
-}
-
-.taxes-confirm__btn--danger {
-  border-color: #dc2626;
-  background: #dc2626;
-  color: white;
 }
 
 /* --- Line tables (Income, Deductions, Withholdings) --- */
@@ -240,7 +232,7 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #6b7280;
+  color: #374151;
 }
 
 .taxes-lines-table__head span:not(:first-child) {
@@ -307,14 +299,66 @@
 .taxes-hero {
   display: flex;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1.5rem;
-  padding: 0.8rem 1.2rem;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.55rem 1.2rem;
   border-radius: 18px;
   color: white;
   box-shadow: 0 8px 24px rgba(17, 24, 39, 0.1);
+}
+
+.taxes-hero__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1.5rem;
+}
+
+.taxes-hero__years {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.taxes-hero .taxes-hero__year {
+  padding: 0.2rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.taxes-hero .taxes-hero__year:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.taxes-hero .taxes-hero__year--active,
+.taxes-hero .taxes-hero__year--active:hover {
+  border-color: white;
+  background: white;
+  color: #111827;
+}
+
+.taxes-hero .taxes-hero__settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  color: white;
+}
+
+.taxes-hero .taxes-hero__settings:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .taxes-hero--owe {
@@ -323,6 +367,19 @@
 
 .taxes-hero--refund {
   background: linear-gradient(135deg, #14532d, #15803d);
+}
+
+.taxes-hero__main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.taxes-hero__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
 }
 
 .taxes-hero__label {
@@ -336,36 +393,28 @@
 .taxes-hero__amount {
   font-size: 2.1rem;
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
 .taxes-hero__math {
   display: flex;
-  gap: 0.5rem;
-  font-size: 0.88rem;
+  gap: 0.4rem;
+  font-size: 0.85rem;
   opacity: 0.92;
 }
 
-/* The three headline stats sit on the right, stacked as label/value rows. */
+/* The effective-rate stat is a label-over-value column, divided from the year pills and gear. */
 .taxes-hero__stats {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  min-width: 220px;
-  padding-left: 1.25rem;
-  border-left: 1px solid rgba(255, 255, 255, 0.28);
-}
-
-.taxes-hero__stats div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: flex-end;
+  padding-right: 1.25rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.28);
 }
 
 .taxes-hero__stats span {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   opacity: 0.85;
 }
 
@@ -406,11 +455,6 @@
 .taxes-waterfall__label {
   fill: #52514e;
   font-size: 12px;
-}
-
-.taxes-waterfall__inside {
-  font-size: 10.5px;
-  font-weight: 700;
 }
 
 .taxes-tooltip {

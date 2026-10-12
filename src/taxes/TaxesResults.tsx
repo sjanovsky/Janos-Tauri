@@ -11,9 +11,12 @@ interface TaxesResultsProps {
   /** False when the year has no dedicated tax table and a nearby one was used. */
   tableExact: boolean;
   tableYear: number;
+  years: number[];
+  onSelectYear: (year: number) => void;
+  onOpenSettings: () => void;
 }
 
-function TaxesResults({ result, year, tableExact, tableYear }: TaxesResultsProps) {
+function TaxesResults({ result, year, tableExact, tableYear, years, onSelectYear, onOpenSettings }: TaxesResultsProps) {
   const owes = result.balance < 0;
   const used = result.slices.filter((slice) => slice.amount > 0);
   const top = used[used.length - 1];
@@ -23,34 +26,62 @@ function TaxesResults({ result, year, tableExact, tableYear }: TaxesResultsProps
   return (
     <>
       <div className={`taxes-hero ${owes ? "taxes-hero--owe" : "taxes-hero--refund"}`}>
-        <div className="taxes-hero__main">
-          <div className="taxes-hero__label">
-            {year} federal · {owes ? "You owe" : "Projected refund"}
+        <div className="taxes-hero__row">
+          <div className="taxes-hero__main">
+            <div className="taxes-hero__amount">{money(Math.abs(result.balance))}</div>
+            <div className="taxes-hero__side">
+              <div className="taxes-hero__label">{owes ? "You owe" : "Projected refund"}</div>
+              <div className="taxes-hero__math">
+                <span>
+                  <strong>{money(result.totalOwed)}</strong> owed
+                </span>
+                <span>−</span>
+                <span>
+                  <strong>{money(result.withheld)}</strong> withheld
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="taxes-hero__amount">{money(Math.abs(result.balance))}</div>
-          <div className="taxes-hero__math">
-            <span>
-              <strong>{money(result.totalOwed)}</strong> owed
-            </span>
-            <span>−</span>
-            <span>
-              <strong>{money(result.withheld)}</strong> withheld
-            </span>
-          </div>
-        </div>
-        <div className="taxes-hero__stats">
-          <div>
+          <div className="taxes-hero__stats">
             <span>Effective rate</span>
             <strong>{percent(result.effectiveRate)}</strong>
           </div>
-          <div>
-            <span>Top bracket</span>
-            <strong>{top ? percent(top.rate) : "—"}</strong>
+          <div className="taxes-hero__years" role="tablist" aria-label="Tax year">
+            {years.map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={value === year}
+                className={`taxes-hero__year ${value === year ? "taxes-hero__year--active" : ""}`}
+                onClick={() => onSelectYear(value)}
+              >
+                {value}
+              </button>
+            ))}
           </div>
-          <div>
-            <span>Taxable income</span>
-            <strong>{money(result.taxableIncome)}</strong>
-          </div>
+          <button
+            type="button"
+            className="taxes-hero__settings"
+            aria-label="Open settings"
+            title="Settings"
+            onClick={onOpenSettings}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
         </div>
         {!tableExact && (
           <p className="taxes-hero__note">

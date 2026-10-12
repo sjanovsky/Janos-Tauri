@@ -1,9 +1,18 @@
+import type { CSSProperties } from "react";
 import NumberField from "./NumberField";
-import { TAX_LINE_FIELDS, projectItem, type TaxItemRecord, type TaxLineField } from "./lib/taxes";
+import {
+  SECTION_COLORS,
+  TAX_LINE_FIELDS,
+  projectItem,
+  type SectionTone,
+  type TaxItemRecord,
+  type TaxLineField,
+} from "./lib/taxes";
 import { wholeCurrencyFormatter } from "../spending/lib/format";
 
 interface LinesPanelProps {
   title: string;
+  tone: SectionTone;
   description: string;
   addLabel: string;
   emptyText: string;
@@ -23,6 +32,7 @@ interface LinesPanelProps {
 // Deductions and Withholdings. A one-off amount just needs a year-to-date value.
 export function LinesPanel({
   title,
+  tone,
   description,
   addLabel,
   emptyText,
@@ -34,7 +44,10 @@ export function LinesPanel({
 }: LinesPanelProps) {
   return (
     <div className="taxes-card">
-      <div className="taxes-card__header">
+      <div
+        className={`taxes-card__header taxes-card__header--banner taxes-tone--${tone}`}
+        style={{ "--tone-accent": SECTION_COLORS[tone] } as CSSProperties}
+      >
         <div>
           <h2>{title}</h2>
           <p>{description}</p>
@@ -48,7 +61,7 @@ export function LinesPanel({
             <span>Name</span>
             <span>Year to date</span>
             <span>Last paycheck</span>
-            <span>Paychecks left</span>
+            <span>Paycheck</span>
             <span>Year-end</span>
             <span />
           </div>
@@ -117,7 +130,10 @@ export function TaxLinesPanel({ values, onChange }: TaxLinesPanelProps) {
 
   return (
     <div className="taxes-card">
-      <div className="taxes-card__header">
+      <div
+        className="taxes-card__header taxes-card__header--banner taxes-tone--violet"
+        style={{ "--tone-accent": SECTION_COLORS.violet } as CSSProperties}
+      >
         <div>
           <h2>Other federal taxes</h2>
           <p>Amounts you've worked out elsewhere. Qualified dividends are taken out of the regular brackets.</p>

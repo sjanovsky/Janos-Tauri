@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import "./taxes.css";
 import { LinesPanel, TaxLinesPanel } from "./TaxesInputs";
 import TaxesResults from "./TaxesResults";
+import TaxesSettingsModal from "./TaxesSettingsModal";
 import {
   computeFederal,
   projectItem,
@@ -25,7 +26,7 @@ function TaxesPage() {
   const [data, setData] = useState<TaxesData>(EMPTY);
   const [loaded, setLoaded] = useState(false);
   const [year, setYear] = useState<number>(() => new Date().getFullYear());
-  const [confirmDeleteYear, setConfirmDeleteYear] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
 
   const reload = useCallback(
@@ -108,8 +109,7 @@ function TaxesPage() {
 
   // --- Years ---
 
-  const handleAddYear = async () => {
-    const next = years.length > 0 ? years[years.length - 1] + 1 : new Date().getFullYear();
+  const handleAddYear = async (next: number) => {
     await invoke("add_taxes_year", { year: next }).catch((error) => {
       console.error("Failed to add the year", error);
       setDbError(DB_ERROR);
@@ -118,16 +118,28 @@ function TaxesPage() {
     setYear(next);
   };
 
-  const handleDeleteYear = async () => {
-    setConfirmDeleteYear(false);
-    const remaining = years.filter((value) => value !== year);
-    await invoke("delete_taxes_year", { year }).catch((error) => {
+  const handleDeleteYear = async (target: number) => {
+    const remaining = years.filter((value) => value !== target);
+    if (remaining.length === 0) {
+      return;
+    }
+    await invoke("delete_taxes_year", { year: target }).catch((error) => {
       console.error("Failed to delete the year", error);
       setDbError(DB_ERROR);
     });
     await reload();
-    setYear(remaining[remaining.length - 1]);
+    if (target === year) {
+      setYear(remaining[remaining.length - 1]);
+    }
   };
+
+  const itemCountByYear = useMemo(() => {
+    const counts: Record<number, number> = {};
+    data.items.forEach((item) => {
+      counts[item.year] = (counts[item.year] ?? 0) + 1;
+    });
+    return counts;
+  }, [data.items]);
 
   // --- Household tax lines ---
 
@@ -197,54 +209,12 @@ function TaxesPage() {
     <>
       {dbError && <div className="import-shell__db-error">{dbError}</div>}
       <section className="taxes-page">
-        <header className="taxes-header">
-          <div>
-            <h1>Taxes</h1>
-            <p>Projected federal taxes owed vs. withheld, married filing jointly.</p>
-          </div>
-          <div className="taxes-years">
-            {years.map((value) => (
-              <button
-                key={value}
-                className={`range-pill ${value === year ? "range-pill--active" : ""}`}
-                onClick={() => {
-                  setYear(value);
-                  setConfirmDeleteYear(false);
-                }}
-              >
-                {value}
-              </button>
-            ))}
-            <button className="range-pill" onClick={() => void handleAddYear()} title="Add the next year">
-              + Year
-            </button>
-            {years.length > 1 &&
-              (confirmDeleteYear ? (
-                <span className="taxes-confirm">
-                  <span>Delete {year} and its numbers?</span>
-                  <button
-                    className="taxes-confirm__btn taxes-confirm__btn--danger"
-                    onClick={() => void handleDeleteYear()}
-                  >
-                    Delete
-                  </button>
-                  <button className="taxes-confirm__btn" onClick={() => setConfirmDeleteYear(false)}>
-                    Keep
-                  </button>
-                </span>
-              ) : (
-                <button className="taxes-link-btn" onClick={() => setConfirmDeleteYear(true)}>
-                  Delete {year}
-                </button>
-              ))}
-          </div>
-        </header>
-
         {!loaded ? null : (
           <div className="taxes-body">
             <div className="taxes-column">
               <LinesPanel
                 title="Income"
+                tone="green"
                 description="Paychecks and anything else that counts as income. For a one-off amount like interest, just fill in Year to date."
                 addLabel="+ Add income"
                 emptyText="No income yet."
@@ -257,6 +227,7 @@ function TaxesPage() {
 
               <LinesPanel
                 title="Deductions"
+                tone="blue"
                 description="Pre-tax contributions that reduce taxable income, projected through year-end."
                 addLabel="+ Add deduction"
                 emptyText="No deductions yet."
@@ -269,6 +240,7 @@ function TaxesPage() {
 
               <LinesPanel
                 title="Withholdings"
+                tone="amber"
                 description="Federal income tax already withheld from paychecks, projected through year-end."
                 addLabel="+ Add withholding"
                 emptyText="No withholdings yet."
@@ -283,11 +255,31 @@ function TaxesPage() {
             </div>
 
             <div className="taxes-column">
-              <TaxesResults result={result} year={year} tableExact={exact} tableYear={table.year} />
+              <TaxesResults
+                result={result}
+                year={year}
+                tableExact={exact}
+                tableYear={table.year}
+                years={years}
+                onSelectYear={setYear}
+                onOpenSettings={() => setSettingsOpen(true)}
+              />
             </div>
           </div>
         )}
       </section>
+
+      {settingsOpen && (
+        <TaxesSettingsModal
+          onClose={() => setSettingsOpen(false)}
+          years={{
+            years,
+            itemCountByYear,
+            onAddYear: (next) => void handleAddYear(next),
+            onDeleteYear: (target) => void handleDeleteYear(target),
+          }}
+        />
+      )}
     </>
   );
 }

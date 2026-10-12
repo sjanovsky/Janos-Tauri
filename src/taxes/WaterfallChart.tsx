@@ -3,9 +3,8 @@ import { abbreviateCurrency, wholeCurrencyFormatter } from "../spending/lib/form
 import type { WaterfallBar, WaterfallSegment } from "./lib/taxes";
 
 const WIDTH = 760;
-const HEIGHT = 340;
-const PAD = { top: 30, right: 10, bottom: 40, left: 10 };
-const MIN_LABEL_HEIGHT = 17;
+const HEIGHT = 250;
+const PAD = { top: 26, right: 10, bottom: 38, left: 10 };
 
 interface Hover {
   bar: WaterfallBar;
@@ -107,18 +106,6 @@ function WaterfallChart({ bars, title }: WaterfallChartProps) {
                       strokeWidth={1}
                       opacity={hover && !active ? 0.55 : 1}
                     />
-                    {height >= MIN_LABEL_HEIGHT && (
-                      <text
-                        x={x + barW / 2}
-                        y={top + height / 2 + 4}
-                        textAnchor="middle"
-                        className="taxes-waterfall__inside"
-                        fill={isLight(segment.color) ? "#1e1b4b" : "#ffffff"}
-                        pointerEvents="none"
-                      >
-                        {segment.shortLabel}
-                      </text>
-                    )}
                   </g>
                 );
               })}
@@ -163,15 +150,6 @@ function WaterfallChart({ bars, title }: WaterfallChartProps) {
       )}
     </div>
   );
-}
-
-// Rough luminance check so inside-bar text stays readable on pale segments.
-function isLight(hex: string): boolean {
-  const value = parseInt(hex.slice(1), 16);
-  const r = (value >> 16) & 255;
-  const g = (value >> 8) & 255;
-  const b = value & 255;
-  return 0.299 * r + 0.587 * g + 0.114 * b > 160;
 }
 
 export default WaterfallChart;

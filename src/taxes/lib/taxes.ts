@@ -231,9 +231,32 @@ export const BRACKET_SHADES = ["#c7d2fe", "#a5b4fc", "#818cf8", "#6366f1", "#4f4
 
 const QUALIFIED_COLOR = "#64748b";
 const TAX_SHADES = ["#e8590c", "#f08c00", "#ffa94d", "#c2410c", "#ffc078", "#9a3412"];
-const INCOME_SHADES = ["#4f46e5", "#a5b4fc", "#6366f1", "#c7d2fe", "#4338ca", "#818cf8"];
-const DEDUCTION_SHADES = ["#0ca678", "#63e6be", "#20c997", "#12b886", "#38d9a9", "#099268"];
-const WITHHELD_SHADES = ["#0891b2", "#22b8cf", "#66d9e8", "#0e7490"];
+
+/** The accent color of each input section. Its header banner and its waterfall bar both use it. */
+export type SectionTone = "green" | "blue" | "amber" | "violet";
+export const SECTION_COLORS: Record<SectionTone, string> = {
+  green: "#10b981",
+  blue: "#3b82f6",
+  amber: "#f59e0b",
+  violet: "#8b5cf6",
+};
+
+/** `count` shades of `base`: the first is `base` exactly, each next one a step closer to white. */
+function tintShades(base: string, count: number): string[] {
+  const value = parseInt(base.slice(1), 16);
+  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  return Array.from({ length: count }, (_, index) => {
+    const amount = count > 1 ? (index / (count - 1)) * 0.6 : 0;
+    const hex = channels.map((c) => Math.round(c + (255 - c) * amount).toString(16).padStart(2, "0"));
+    return `#${hex.join("")}`;
+  });
+}
+
+/** Recolor segments bottom-to-top with the section's color, getting lighter as they stack up. */
+function withSectionShades<T extends { color: string }>(segments: T[], tone: SectionTone): T[] {
+  const shades = tintShades(SECTION_COLORS[tone], segments.length);
+  return segments.map((segment, index) => ({ ...segment, color: shades[index] }));
+}
 
 /** One hoverable slice of a bar. `value` is a positive magnitude (what is drawn). */
 export interface WaterfallSegment {
@@ -286,33 +309,36 @@ export function buildWaterfall(result: FederalResult): WaterfallBar[] {
   // If they exceed earnings the later ones give way, so the bar always lands exactly on taxable
   // income.
   const deductionDefs = [
-    ...result.deductions.map((line, index) => ({
+    ...result.deductions.map((line) => ({
       key: `deduction-${line.id}`,
       label: line.name || "Unnamed deduction",
       shortLabel: line.name || "Deduction",
       value: line.amount,
-      color: DEDUCTION_SHADES[index % DEDUCTION_SHADES.length],
+      color: "",
     })),
     ...losses.map((line) => ({
       key: `loss-${line.id}`,
       label: `${line.name || "Income"} (loss)`,
       shortLabel: "Loss",
       value: -line.amount,
-      color: "#2f9e44",
+      color: "",
     })),
-    { key: "std", label: "Standard deduction", shortLabel: "Std. deduction", value: result.standardDeduction, color: "#087f5b" },
+    { key: "std", label: "Standard deduction", shortLabel: "Std. deduction", value: result.standardDeduction, color: "" },
   ].filter((def) => def.value > 0);
   const clipped = clipToLimit(
     deductionDefs.map((def) => def.value),
     gross,
   );
-  const deductionSegments: WaterfallSegment[] = deductionDefs
-    .map((def, index) => ({
-      ...def,
-      value: clipped[index],
-      detail: clipped[index] < def.value ? `Only ${dollars(clipped[index])} of ${dollars(def.value)} was needed` : undefined,
-    }))
-    .filter((segment) => segment.value > 0);
+  const deductionSegments: WaterfallSegment[] = withSectionShades(
+    deductionDefs
+      .map((def, index) => ({
+        ...def,
+        value: clipped[index],
+        detail: clipped[index] < def.value ? `Only ${dollars(clipped[index])} of ${dollars(def.value)} was needed` : undefined,
+      }))
+      .filter((segment) => segment.value > 0),
+    "blue",
+  );
   const deducted = deductionSegments.reduce((total, segment) => total + segment.value, 0);
   const taxable = Math.max(0, gross - deducted);
 
@@ -352,15 +378,18 @@ export function buildWaterfall(result: FederalResult): WaterfallBar[] {
     .map((def, index) => ({ ...def, color: TAX_SHADES[index] }))
     .filter((segment) => segment.value > 0);
 
-  const withheldSegments: WaterfallSegment[] = result.withholdings
-    .map((line, index) => ({
-      key: `withheld-${line.id}`,
-      label: line.name || "Withheld",
-      shortLabel: line.name || "Withheld",
-      value: Math.max(0, line.amount),
-      color: WITHHELD_SHADES[index % WITHHELD_SHADES.length],
-    }))
-    .filter((segment) => segment.value > 0);
+  const withheldSegments: WaterfallSegment[] = withSectionShades(
+    result.withholdings
+      .map((line) => ({
+        key: `withheld-${line.id}`,
+        label: line.name || "Withheld",
+        shortLabel: line.name || "Withheld",
+        value: Math.max(0, line.amount),
+        color: "",
+      }))
+      .filter((segment) => segment.value > 0),
+    "amber",
+  );
   const withheld = withheldSegments.reduce((total, segment) => total + segment.value, 0);
 
   const owed = result.totalOwed;
@@ -369,13 +398,16 @@ export function buildWaterfall(result: FederalResult): WaterfallBar[] {
   const resultColor = remaining > 0 ? "#dc2626" : "#16a34a";
   const resultLabel = remaining > 0 ? "You owe" : "Refund";
 
-  const earningsSegments: WaterfallSegment[] = gains.map((line, index) => ({
-    key: `income-${line.id}`,
-    label: line.name || "Unnamed income",
-    shortLabel: line.name || "Income",
-    value: line.amount,
-    color: INCOME_SHADES[index % INCOME_SHADES.length],
-  }));
+  const earningsSegments: WaterfallSegment[] = withSectionShades(
+    gains.map((line) => ({
+      key: `income-${line.id}`,
+      label: line.name || "Unnamed income",
+      shortLabel: line.name || "Income",
+      value: line.amount,
+      color: "",
+    })),
+    "green",
+  );
 
   return [
     { key: "earnings", label: "Earnings", start: 0, end: gross, segments: earningsSegments, shown: gross },
