@@ -3,19 +3,6 @@ use crate::db::DbState;
 use rusqlite::{params, Connection};
 use tauri::State;
 
-// Seeded into a brand-new year that has no earlier year to copy from: (section, name).
-const DEFAULT_ITEMS: [(&str, &str); 9] = [
-    ("income", "Paycheck"),
-    ("income", "Interest"),
-    ("income", "Dividends"),
-    ("income", "Short-term capital gains"),
-    ("income", "Gambling winnings"),
-    ("income", "Crypto"),
-    ("deduction", "401(k)"),
-    ("deduction", "HSA"),
-    ("withholding", "Federal tax withheld"),
-];
-
 #[tauri::command]
 pub fn get_taxes_data(state: State<DbState>) -> Result<TaxesData, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
@@ -23,6 +10,9 @@ pub fn get_taxes_data(state: State<DbState>) -> Result<TaxesData, String> {
 }
 
 fn load(conn: &Connection) -> rusqlite::Result<TaxesData> {
+    // Income, deduction and withholding lines are the Sankey's categories; make sure every year
+    // has one for each before reading.
+    crate::sankey::schema::sync_tax_lines(conn)?;
     let years = conn
         .prepare("SELECT year FROM taxes_years ORDER BY year")?
         .query_map([], |row| row.get(0))?
@@ -30,7 +20,8 @@ fn load(conn: &Connection) -> rusqlite::Result<TaxesData> {
 
     let items = conn
         .prepare(
-            "SELECT id, year, section, name, ytd, last_paycheck, paychecks_left, position
+            "SELECT id, year, section, name, ytd, last_paycheck, paychecks_left, position,
+                    sankey_category_id
              FROM taxes_items ORDER BY year, section, position",
         )?
         .query_map([], |row| {
@@ -43,6 +34,7 @@ fn load(conn: &Connection) -> rusqlite::Result<TaxesData> {
                 last_paycheck: row.get(5)?,
                 paychecks_left: row.get(6)?,
                 position: row.get(7)?,
+                sankey_category_id: row.get(8)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -67,56 +59,12 @@ fn load(conn: &Connection) -> rusqlite::Result<TaxesData> {
 
 #[tauri::command]
 pub fn add_taxes_year(state: State<DbState>, year: i64) -> Result<(), String> {
-    // Create the year once. A new year starts with the line names (per section) of the most recent
-    // earlier year, amounts reset to 0, or the defaults if there is none. Re-adding an existing
-    // year is a no-op, so deleting lines in a year never re-seeds them.
-    let mut conn = state.0.lock().map_err(|e| e.to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
-
-    let inserted = tx
-        .execute("INSERT OR IGNORE INTO taxes_years (year) VALUES (?1)", params![year])
+    // A year's lines are the Sankey's categories, created on demand by the sync, so adding a year
+    // is just recording it. Re-adding an existing year is a no-op.
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    conn.execute("INSERT OR IGNORE INTO taxes_years (year) VALUES (?1)", params![year])
         .map_err(|e| e.to_string())?;
-    if inserted == 0 {
-        return Ok(());
-    }
-
-    let previous_year: Option<i64> = tx
-        .query_row(
-            "SELECT MAX(year) FROM taxes_years WHERE year < ?1",
-            params![year],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
-
-    let lines: Vec<(String, String)> = match previous_year {
-        Some(previous) => tx
-            .prepare(
-                "SELECT section, name FROM taxes_items WHERE year = ?1 ORDER BY section, position",
-            )
-            .map_err(|e| e.to_string())?
-            .query_map(params![previous], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(|e| e.to_string())?
-            .collect::<Result<_, _>>()
-            .map_err(|e| e.to_string())?,
-        None => DEFAULT_ITEMS
-            .iter()
-            .map(|(section, name)| (section.to_string(), name.to_string()))
-            .collect(),
-    };
-
-    // Position counts up within each section.
-    let mut counts = std::collections::HashMap::<String, i64>::new();
-    for (section, name) in lines {
-        let position = counts.entry(section.clone()).or_insert(0);
-        tx.execute(
-            "INSERT INTO taxes_items (id, year, section, name, position) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![format!("seed-{}-{}-{}", year, section, position), year, section, name, *position],
-        )
-        .map_err(|e| e.to_string())?;
-        *position += 1;
-    }
-
-    tx.commit().map_err(|e| e.to_string())?;
+    crate::sankey::schema::sync_tax_lines(&conn).map_err(|e| e.to_string())?;
     Ok(())
 }
 

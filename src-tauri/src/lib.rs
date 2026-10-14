@@ -1,5 +1,6 @@
 mod db;
 mod networth;
+mod sankey;
 mod spending;
 mod taxes;
 
@@ -98,6 +99,7 @@ pub fn run() {
             spending::list_banks,
             spending::upsert_bank,
             spending::delete_bank,
+            spending::set_bank_spending_positive,
             spending::list_buckets,
             spending::upsert_bucket,
             spending::set_bucket_positions,
@@ -123,6 +125,16 @@ pub fn run() {
             taxes::set_taxes_household_value,
             taxes::upsert_taxes_item,
             taxes::delete_taxes_item,
+            sankey::get_sankey_data,
+            sankey::upsert_sankey_bucket,
+            sankey::set_sankey_bucket_positions,
+            sankey::delete_sankey_bucket,
+            sankey::upsert_sankey_category,
+            sankey::set_sankey_category_positions,
+            sankey::delete_sankey_category,
+            sankey::set_paycheck_line,
+            sankey::upsert_sankey_rule,
+            sankey::delete_sankey_rule,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

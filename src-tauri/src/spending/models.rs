@@ -50,4 +50,7 @@ pub struct BankRecord {
     pub id: String,
     pub name: String,
     pub logo_data_url: Option<String>,
+    /// True when this bank's statements list money going out as a positive amount (credit
+    /// cards); false when deposits are the positive side (many checking exports).
+    pub spending_positive: bool,
 }

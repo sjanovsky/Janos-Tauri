@@ -727,7 +727,7 @@ function SpendingPage() {
     }
     const previousBanks = bankRecords;
     const id = crypto.randomUUID();
-    setBankRecords((current) => [...current, { id, name: trimmed, logoDataUrl: null }]);
+    setBankRecords((current) => [...current, { id, name: trimmed, logoDataUrl: null, spendingPositive: true }]);
 
     invoke("upsert_bank", { id, name: trimmed, logoDataUrl: null }).catch((error) => {
       console.error("Failed to save the new bank to the database", error);
@@ -778,6 +778,19 @@ function SpendingPage() {
     invoke("upsert_bank", { id, name, logoDataUrl }).catch((error) => {
       console.error("Failed to save the bank logo to the database", error);
       setDbError("Couldn't save that bank logo to the database.");
+      setBankRecords(previousBanks);
+    });
+  };
+
+  const handleSetBankSpendingPositive = (id: string, spendingPositive: boolean) => {
+    const previousBanks = bankRecords;
+    setBankRecords((current) =>
+      current.map((bank) => (bank.id === id ? { ...bank, spendingPositive } : bank)),
+    );
+
+    invoke("set_bank_spending_positive", { id, spendingPositive }).catch((error) => {
+      console.error("Failed to save the bank's amount sign to the database", error);
+      setDbError("Couldn't save that bank setting to the database.");
       setBankRecords(previousBanks);
     });
   };
@@ -934,6 +947,7 @@ function SpendingPage() {
     onUpdateBank: handleUpdateBank,
     onDeleteBank: handleDeleteBank,
     onSetBankLogo: handleSetBankLogo,
+    onSetBankSpendingPositive: handleSetBankSpendingPositive,
   };
 
   return (

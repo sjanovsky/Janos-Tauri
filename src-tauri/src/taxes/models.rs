@@ -24,6 +24,8 @@ pub struct TaxItemRecord {
     pub last_paycheck: f64,
     pub paychecks_left: f64,
     pub position: i64,
+    /// The Sankey category this line belongs to. Lines are created and named on the Sankey page.
+    pub sankey_category_id: Option<String>,
 }
 
 /// Everything the Taxes page needs, loaded in one call.

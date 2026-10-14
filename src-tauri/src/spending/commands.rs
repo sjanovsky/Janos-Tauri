@@ -251,7 +251,7 @@ pub fn set_category_positions(state: State<DbState>, ids: Vec<String>) -> Result
 pub fn list_banks(state: State<DbState>) -> Result<Vec<BankRecord>, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, name, logo_data_url FROM banks ORDER BY name COLLATE NOCASE")
+        .prepare("SELECT id, name, logo_data_url, spending_positive FROM banks ORDER BY name COLLATE NOCASE")
         .map_err(|e| e.to_string())?;
 
     let banks: Vec<BankRecord> = stmt
@@ -260,6 +260,7 @@ pub fn list_banks(state: State<DbState>) -> Result<Vec<BankRecord>, String> {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 logo_data_url: row.get(2)?,
+                spending_positive: row.get::<_, i64>(3)? != 0,
             })
         })
         .map_err(|e| e.to_string())?
@@ -281,6 +282,21 @@ pub fn upsert_bank(
         "INSERT INTO banks (id, name, logo_data_url) VALUES (?1, ?2, ?3)
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, logo_data_url = excluded.logo_data_url",
         params![id, name, logo_data_url],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_bank_spending_positive(
+    state: State<DbState>,
+    id: String,
+    spending_positive: bool,
+) -> Result<(), String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE banks SET spending_positive = ?2 WHERE id = ?1",
+        params![id, spending_positive as i64],
     )
     .map_err(|e| e.to_string())?;
     Ok(())

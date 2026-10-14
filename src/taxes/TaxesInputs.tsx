@@ -14,33 +14,29 @@ interface LinesPanelProps {
   title: string;
   tone: SectionTone;
   description: string;
-  addLabel: string;
   emptyText: string;
   items: TaxItemRecord[];
   total: number;
-  onAdd: () => void;
   onChange: (
     id: string,
     changes: Partial<Pick<TaxItemRecord, "name" | "ytd" | "lastPaycheck" | "paychecksLeft">>,
     persist: boolean,
   ) => void;
-  onDelete: (id: string) => void;
 }
 
-// A table of user-defined lines: a name you type, year to date, last paycheck, paychecks left, and
-// the calculated year-end (year to date + last paycheck × paychecks left). Used for Income,
-// Deductions and Withholdings. A one-off amount just needs a year-to-date value.
+// A table of lines: the name, year to date, last paycheck, paychecks left, and the calculated
+// year-end (year to date + last paycheck × paychecks left). Used for Income, Deductions and
+// Withholdings. The lines themselves are the overview's paycheck categories (so the numbers are
+// entered once and tie to the diagram); only their amounts are edited here. A one-off amount just
+// needs a year-to-date value.
 export function LinesPanel({
   title,
   tone,
   description,
-  addLabel,
   emptyText,
   items,
   total,
-  onAdd,
   onChange,
-  onDelete,
 }: LinesPanelProps) {
   return (
     <div className="taxes-card">
@@ -63,20 +59,12 @@ export function LinesPanel({
             <span>Last paycheck</span>
             <span>Paycheck</span>
             <span>Year-end</span>
-            <span />
           </div>
         )}
         {items.length === 0 && <p className="taxes-empty">{emptyText}</p>}
         {items.map((item) => (
           <div className="taxes-lines-table__row" key={item.id}>
-            <input
-              className="taxes-lines-table__name"
-              aria-label={`${title} name`}
-              value={item.name}
-              placeholder="Name"
-              onChange={(event) => onChange(item.id, { name: event.target.value }, false)}
-              onBlur={(event) => onChange(item.id, { name: event.target.value }, true)}
-            />
+            <span className="taxes-lines-table__name taxes-lines-table__name--static">{item.name}</span>
             <NumberField
               value={item.ytd}
               ariaLabel={`${item.name} year to date`}
@@ -97,20 +85,12 @@ export function LinesPanel({
               onCommit={(paychecksLeft) => onChange(item.id, { paychecksLeft }, true)}
             />
             <span className="taxes-lines-table__projected">{wholeCurrencyFormatter.format(projectItem(item))}</span>
-            <button
-              className="taxes-icon-btn"
-              aria-label={`Delete ${item.name}`}
-              title="Delete"
-              onClick={() => onDelete(item.id)}
-            >
-              ×
-            </button>
           </div>
         ))}
       </div>
-      <button className="taxes-link-btn" onClick={onAdd}>
-        {addLabel}
-      </button>
+      <p className="taxes-note">
+        Lines come from the Overview tab, where you add, rename and remove them and enter these numbers once.
+      </p>
     </div>
   );
 }

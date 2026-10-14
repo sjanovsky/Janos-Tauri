@@ -7,6 +7,7 @@ export type BankSettingsProps = {
   onUpdateBank: (id: string, name: string) => void;
   onDeleteBank: (id: string) => void;
   onSetBankLogo: (id: string, logoDataUrl: string | null) => void;
+  onSetBankSpendingPositive: (id: string, spendingPositive: boolean) => void;
 };
 
 function TrashIcon() {
@@ -34,7 +35,14 @@ function TrashIcon() {
 // spending table can show it. Laid out like the recent-uploads table — bank name on the left, a
 // clickable logo chip (click it to upload), and a trash action. Rendered inside the manage modal's
 // "Banks" tab (the modal owns the surrounding chrome and close button).
-function BankSettings({ banks, onAddBank, onUpdateBank, onDeleteBank, onSetBankLogo }: BankSettingsProps) {
+function BankSettings({
+  banks,
+  onAddBank,
+  onUpdateBank,
+  onDeleteBank,
+  onSetBankLogo,
+  onSetBankSpendingPositive,
+}: BankSettingsProps) {
   const [newBankName, setNewBankName] = useState("");
 
   const handleAddBank = (event: FormEvent<HTMLFormElement>) => {
@@ -63,8 +71,11 @@ function BankSettings({ banks, onAddBank, onUpdateBank, onDeleteBank, onSetBankL
   return (
     <div className="bank-settings">
       <div className="bank-settings__header">
-        <h2>Bank logos</h2>
-        <p>Set the banks you use and upload each bank’s logo so the spending table can show them clearly.</p>
+        <h2>Banks</h2>
+        <p>
+          Set the banks you use, upload each bank’s logo so the spending table can show them clearly, and say
+          how its statements sign amounts so deposits and spending are told apart on the overview.
+        </p>
       </div>
 
       {banks.length === 0 ? (
@@ -76,6 +87,7 @@ function BankSettings({ banks, onAddBank, onUpdateBank, onDeleteBank, onSetBankL
               <tr>
                 <th className="bank-settings-table__logo-col">Logo</th>
                 <th>Bank</th>
+                <th>Spending shows as</th>
                 <th className="uploads-table__actions" aria-label="Remove" />
               </tr>
             </thead>
@@ -121,6 +133,16 @@ function BankSettings({ banks, onAddBank, onUpdateBank, onDeleteBank, onSetBankL
                         }
                       }}
                     />
+                  </td>
+                  <td>
+                    <select
+                      aria-label={`How ${bank.name} signs spending`}
+                      value={bank.spendingPositive ? "positive" : "negative"}
+                      onChange={(event) => onSetBankSpendingPositive(bank.id, event.target.value === "positive")}
+                    >
+                      <option value="positive">Positive (card charges)</option>
+                      <option value="negative">Negative (checking debits)</option>
+                    </select>
                   </td>
                   <td className="uploads-table__actions">
                     <button

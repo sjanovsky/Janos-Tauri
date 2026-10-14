@@ -2,6 +2,9 @@ export type BankRecord = {
   id: string;
   name: string;
   logoDataUrl: string | null;
+  // True when this bank's statements list money going out as a positive amount (credit cards);
+  // false when deposits are the positive side (many checking exports).
+  spendingPositive: boolean;
 };
 
 export function normalizeBankName(bankName: string): string {

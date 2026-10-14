@@ -22,6 +22,8 @@ export interface TaxItemRecord {
   lastPaycheck: number;
   paychecksLeft: number;
   position: number;
+  /** The overview category this line belongs to; lines are created and named there. */
+  sankeyCategoryId?: string | null;
 }
 
 /** Year-end projection of a line: year to date + last paycheck × paychecks left. */

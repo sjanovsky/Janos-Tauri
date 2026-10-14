@@ -162,17 +162,6 @@ function TaxesPage() {
 
   // --- Lines (income, deductions, withholdings) ---
 
-  const handleAddItem = (section: TaxSection, name: string) => {
-    const id = crypto.randomUUID();
-    const position =
-      data.items
-        .filter((item) => item.year === year && item.section === section)
-        .reduce((max, item) => Math.max(max, item.position), -1) + 1;
-    const item: TaxItemRecord = { id, year, section, name, ytd: 0, lastPaycheck: 0, paychecksLeft: 0, position };
-    setData((current) => ({ ...current, items: [...current.items, item] }));
-    persist("upsert_taxes_item", { id, year, section, name, ytd: 0, lastPaycheck: 0, paychecksLeft: 0 });
-  };
-
   const handleChangeItem = (
     id: string,
     changes: Partial<Pick<TaxItemRecord, "name" | "ytd" | "lastPaycheck" | "paychecksLeft">>,
@@ -200,11 +189,6 @@ function TaxesPage() {
     }
   };
 
-  const handleDeleteItem = (id: string) => {
-    setData((current) => ({ ...current, items: current.items.filter((item) => item.id !== id) }));
-    persist("delete_taxes_item", { id });
-  };
-
   return (
     <>
       {dbError && <div className="import-shell__db-error">{dbError}</div>}
@@ -216,39 +200,30 @@ function TaxesPage() {
                 title="Income"
                 tone="green"
                 description="Paychecks and anything else that counts as income. For a one-off amount like interest, just fill in Year to date."
-                addLabel="+ Add income"
-                emptyText="No income yet."
+                emptyText="No income lines yet. Add income categories on the Overview tab."
                 items={incomeItems}
                 total={sumOf(incomeItems)}
-                onAdd={() => handleAddItem("income", "New income")}
                 onChange={handleChangeItem}
-                onDelete={handleDeleteItem}
               />
 
               <LinesPanel
                 title="Deductions"
                 tone="blue"
                 description="Pre-tax contributions that reduce taxable income, projected through year-end."
-                addLabel="+ Add deduction"
-                emptyText="No deductions yet."
+                emptyText="No deductions yet. Mark a paycheck category as a pre-tax deduction on the Overview tab."
                 items={deductionItems}
                 total={sumOf(deductionItems)}
-                onAdd={() => handleAddItem("deduction", "New deduction")}
                 onChange={handleChangeItem}
-                onDelete={handleDeleteItem}
               />
 
               <LinesPanel
                 title="Withholdings"
                 tone="amber"
                 description="Federal income tax already withheld from paychecks, projected through year-end."
-                addLabel="+ Add withholding"
-                emptyText="No withholdings yet."
+                emptyText="No withholdings yet. Mark a paycheck category as federal withholding on the Overview tab."
                 items={withholdingItems}
                 total={sumOf(withholdingItems)}
-                onAdd={() => handleAddItem("withholding", "New withholding")}
                 onChange={handleChangeItem}
-                onDelete={handleDeleteItem}
               />
 
               <TaxLinesPanel values={householdValues} onChange={handleTaxLine} />

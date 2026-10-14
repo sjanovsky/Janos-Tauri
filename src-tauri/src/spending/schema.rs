@@ -112,6 +112,20 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("ALTER TABLE banks ADD COLUMN logo_data_url TEXT", [])?;
     }
 
+    // Migrate databases created before banks could say which sign their spending carries. Most
+    // statements list spending as positive; some checking exports list it as negative.
+    let has_spending_positive: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('banks') WHERE name = 'spending_positive'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_spending_positive == 0 {
+        conn.execute(
+            "ALTER TABLE banks ADD COLUMN spending_positive INTEGER NOT NULL DEFAULT 1",
+            [],
+        )?;
+    }
+
     // Migrate databases created before categories could be ordered within a bucket. Existing
     // rows default to position 0, so they keep their prior (label) order until the user drags
     // to reorder a bucket.
