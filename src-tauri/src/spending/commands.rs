@@ -99,6 +99,10 @@ pub fn add_upload(
         }
     }
 
+    // Paycheck deposit names classify the new rows right away, so paychecks are filed on import.
+    // Only unclassified rows are touched, and only at upload time: nothing already stored changes.
+    crate::income::commands::apply_paycheck_names(&tx, &id).map_err(|e| e.to_string())?;
+
     tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -373,6 +377,10 @@ pub fn set_bucket_positions(state: State<DbState>, ids: Vec<String>) -> Result<(
 
 #[tauri::command]
 pub fn delete_bucket(state: State<DbState>, id: String) -> Result<(), String> {
+    // The Income page is built on this bucket, so it can be renamed but not deleted.
+    if id == "income" {
+        return Err("The Income bucket can't be deleted.".to_string());
+    }
     let mut conn = state.0.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 

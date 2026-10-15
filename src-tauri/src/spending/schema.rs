@@ -8,6 +8,12 @@ const DEFAULT_CATEGORIES: [(&str, &str, &str); 5] = [
     ("stuff", "Stuff", "#4a3aa7"),
 ];
 
+const DEFAULT_INCOME_CATEGORIES: [(&str, &str, &str); 3] = [
+    ("income-paycheck", "Paycheck", "#4f46e5"),
+    ("income-commission", "Commission", "#0ca678"),
+    ("income-bonus", "Bonus", "#f08c00"),
+];
+
 /// Create and migrate the tables owned by the spending feature (uploads, transactions,
 /// categories, buckets, banks). Called from `crate::db::init_db`, which owns connection-level
 /// setup such as `PRAGMA foreign_keys`.
@@ -139,6 +145,24 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             "ALTER TABLE categories ADD COLUMN position INTEGER NOT NULL DEFAULT 0",
             [],
         )?;
+    }
+
+    // The Income page's reserved bucket and its starter categories. The bucket is recreated if
+    // missing; the categories are only seeded together with it, so ones the user deletes or
+    // renames stay that way.
+    let seeded_income = conn.execute(
+        "INSERT OR IGNORE INTO buckets (id, name, color, position)
+         VALUES ('income', 'Income', '#4f46e5', COALESCE((SELECT MAX(position) + 1 FROM buckets), 0))",
+        [],
+    )?;
+    if seeded_income > 0 {
+        for (index, (id, label, color)) in DEFAULT_INCOME_CATEGORIES.iter().enumerate() {
+            conn.execute(
+                "INSERT OR IGNORE INTO categories (id, label, color, bucket_id, position)
+                 VALUES (?1, ?2, ?3, 'income', ?4)",
+                rusqlite::params![id, label, color, index as i64],
+            )?;
+        }
     }
 
     let category_count: i64 =

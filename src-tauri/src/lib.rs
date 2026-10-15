@@ -1,4 +1,5 @@
 mod db;
+mod income;
 mod networth;
 mod sankey;
 mod spending;
@@ -125,6 +126,19 @@ pub fn run() {
             taxes::set_taxes_household_value,
             taxes::upsert_taxes_item,
             taxes::delete_taxes_item,
+            income::get_paychecks_data,
+            income::upsert_paycheck,
+            income::delete_paycheck,
+            income::set_paycheck_value,
+            income::add_paycheck_version,
+            income::update_paycheck_version,
+            income::delete_paycheck_version,
+            income::upsert_paycheck_bucket,
+            income::delete_paycheck_bucket,
+            income::upsert_paycheck_item,
+            income::delete_paycheck_item,
+            income::set_paycheck_bucket_positions,
+            income::set_paycheck_item_layout,
             sankey::get_sankey_data,
             sankey::upsert_sankey_bucket,
             sankey::set_sankey_bucket_positions,

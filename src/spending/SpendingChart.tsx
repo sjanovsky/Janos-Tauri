@@ -41,7 +41,7 @@ export type BucketMeta = { id: string; name: string; color: string };
 
 // The chart can stack spending by bucket (categories rolled into buckets) or by the bank
 // each transaction was imported from.
-export type GroupMode = "bucket" | "bank";
+export type GroupMode = "bucket" | "bank" | "gross";
 
 type TooltipAnchor = {
   point: BucketChartPoint;
@@ -94,6 +94,14 @@ type SpendingChartProps = {
   onToggleCategoryFilter: (category: string) => void;
   onToggleBucketFilter: (bucketId: string) => void;
   onOpenSettings: () => void;
+  // Wording, so the Income page can reuse the card: "Spending" by default.
+  title?: string;
+  bucketLabel?: string;
+  settingsLabel?: string;
+  // Which grouping pills to offer, in order; defaults to buckets and banks.
+  groupOptions?: { mode: GroupMode; label: string }[];
+  // Label of the bottom row that sums every column; "Net" by default.
+  netLabel?: string;
 };
 
 // The "Spending by {range}" card: a diverging stacked-bar chart with a per-bucket (or
@@ -118,6 +126,11 @@ function SpendingChart({
   onToggleCategoryFilter,
   onToggleBucketFilter,
   onOpenSettings,
+  title = "Spending",
+  bucketLabel = "Buckets",
+  settingsLabel = "Buckets & categories",
+  groupOptions,
+  netLabel = "Net",
 }: SpendingChartProps) {
   const [tooltipAnchor, setTooltipAnchor] = useState<TooltipAnchor | null>(null);
 
@@ -126,14 +139,14 @@ function SpendingChart({
       <div className="import-shell__chart-card">
         <div className="import-shell__chart-header">
           <div>
-            <h2>Spending by {chartRange}</h2>
+            <h2>{title} by {chartRange}</h2>
           </div>
           <div className="import-shell__chart-tools">
             <button
               type="button"
               className="import-shell__settings-button"
-              aria-label="Open buckets and categories settings"
-              title="Buckets & categories"
+              aria-label={`Open ${settingsLabel.toLowerCase()} settings`}
+              title={settingsLabel}
               onClick={onOpenSettings}
             >
               <svg
@@ -167,9 +180,12 @@ function SpendingChart({
                     <div
                       className="import-shell__group-toggle"
                       role="group"
-                      aria-label="Group spending by"
+                      aria-label={`Group ${title.toLowerCase()} by`}
                     >
-                      {(["bucket", "bank"] as GroupMode[]).map((mode) => (
+                      {(groupOptions ?? [
+                        { mode: "bucket" as GroupMode, label: bucketLabel },
+                        { mode: "bank" as GroupMode, label: "Banks" },
+                      ]).map(({ mode, label }) => (
                         <button
                           key={mode}
                           type="button"
@@ -177,7 +193,7 @@ function SpendingChart({
                           aria-pressed={groupMode === mode}
                           onClick={() => onGroupModeChange(mode)}
                         >
-                          {mode === "bucket" ? "Buckets" : "Banks"}
+                          {label}
                         </button>
                       ))}
                     </div>
@@ -252,7 +268,7 @@ function SpendingChart({
                           </button>
                         );
                       })}
-                      <div className="import-shell__totals-label import-shell__totals-label--net">Net</div>
+                      <div className="import-shell__totals-label import-shell__totals-label--net">{netLabel}</div>
                     </div>
                   )}
                 </div>

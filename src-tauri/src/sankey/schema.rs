@@ -294,7 +294,7 @@ fn seed_defaults(conn: &Connection) -> rusqlite::Result<()> {
 
     // Spending breaks down by the spending page's own buckets, in their order.
     let spending: Vec<(String, String)> = conn
-        .prepare("SELECT id, name FROM buckets ORDER BY position, name COLLATE NOCASE")?
+        .prepare("SELECT id, name FROM buckets WHERE id <> 'income' ORDER BY position, name COLLATE NOCASE")?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<Result<_, _>>()?;
     for (index, (spending_id, name)) in spending.iter().enumerate() {

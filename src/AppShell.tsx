@@ -1,14 +1,18 @@
 import { useState } from "react";
 import SpendingPage from "./spending/SpendingPage";
+import IncomePage from "./income/IncomePage";
 import NetWorthPage from "./networth/NetWorthPage";
 import TaxesPage from "./taxes/TaxesPage";
 import SankeyPage from "./sankey/SankeyPage";
 import "./spending/BankImportPage.css";
 
-type View = "spending" | "networth" | "taxes" | "sankey";
+type View =
+  "income" | "paychecks" | "spending" | "networth" | "taxes" | "sankey";
 
 const TABS: { id: View; label: string }[] = [
   { id: "sankey", label: "Overview" },
+  { id: "income", label: "Income" },
+  { id: "paychecks", label: "Paychecks" },
   { id: "spending", label: "Spending" },
   { id: "taxes", label: "Taxes" },
   { id: "networth", label: "Net Worth" },
@@ -38,6 +42,8 @@ function AppShell() {
       </header>
 
       <main className="import-shell__content">
+        {view === "income" && <IncomePage view="income" />}
+        {view === "paychecks" && <IncomePage view="paychecks" />}
         {view === "spending" && <SpendingPage />}
         {view === "networth" && <NetWorthPage />}
         {view === "taxes" && <TaxesPage />}

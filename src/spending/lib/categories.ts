@@ -19,6 +19,10 @@ export type BucketRecord = {
   position: number;
 };
 
+// Id of the reserved bucket the Income page is built on. Its categories (Paycheck, Commission,
+// Bonus, ...) hold money coming in, so the Spending page and the Sankey's spending leave them out.
+export const INCOME_BUCKET_ID = "income";
+
 // Id used for the catch-all section of categories that don't belong to a bucket.
 export const UNGROUPED_BUCKET_ID = "__ungrouped";
 

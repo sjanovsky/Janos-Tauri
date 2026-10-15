@@ -26,6 +26,7 @@ import {
   isReservedCategory,
   isTransferCategory,
   nextBucketColor,
+  INCOME_BUCKET_ID,
   UNCLASSIFIED_BUCKET_COLOR,
   UNCLASSIFIED_BUCKET_ID,
   UNCLASSIFIED_CATEGORY,
@@ -112,6 +113,12 @@ function SpendingPage() {
   useMemo(() => applyCategoryRecords(categoryRecords), [categoryRecords]);
 
   const masterTransactions = useMemo(() => uploads.flatMap((upload) => upload.transactions), [uploads]);
+
+  // Income categories hold money coming in; they live on the Income page, not in spending.
+  const incomeCategories = useMemo(
+    () => new Set(categoryRecords.filter((record) => record.bucketId === INCOME_BUCKET_ID).map((record) => record.id)),
+    [categoryRecords],
+  );
 
   const excludedCategories = useMemo(
     () => new Set(categoryRecords.filter((record) => record.excluded).map((record) => record.id)),
@@ -212,9 +219,10 @@ function SpendingPage() {
         (transaction) =>
           !isTransferCategory(transaction.category) &&
           !excludedCategories.has(transaction.category) &&
+          !incomeCategories.has(transaction.category) &&
           selectedCategories.includes(transaction.category),
       ),
-    [masterTransactions, selectedCategories, excludedCategories],
+    [masterTransactions, selectedCategories, excludedCategories, incomeCategories],
   );
 
   const chartSeries = useMemo(
@@ -339,7 +347,12 @@ function SpendingPage() {
     // the current view — its columns just read "—". This keeps the totals section in sync with
     // the categories managed in BucketsAndCategories.
     const activeRows = categoryList
-      .filter((category) => selectedCategories.includes(category) && !excludedCategories.has(category))
+      .filter(
+        (category) =>
+          selectedCategories.includes(category) &&
+          !excludedCategories.has(category) &&
+          !incomeCategories.has(category),
+      )
       .map((category) => {
         const perColumn = chartSeries.map((point) => {
           const segment = point.segments.find((item) => item.category === category);
@@ -425,6 +438,7 @@ function SpendingPage() {
     categoryList,
     selectedCategories,
     excludedCategories,
+    incomeCategories,
     chartSeries,
     bucketMeta,
     resolveDisplayBucketId,
@@ -631,7 +645,9 @@ function SpendingPage() {
         fileName: upload.fileName,
         transactions: upload.transactions,
       });
-      setUploads((current) => [upload, ...current]);
+      // Income rules run as the upload is stored, so re-read it to show their categories.
+      const stored = await invoke<UploadedFileView[]>("list_uploads").catch(() => null);
+      setUploads(stored ?? ((current) => [upload, ...current]));
       return true;
     } catch (error) {
       console.error("Failed to save upload to the database", error);
