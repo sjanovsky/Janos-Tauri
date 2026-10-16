@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ImportedTransaction } from "./lib/csvParser";
-import type { UploadedFileView } from "./BankReportUpload";
+import type { UploadedFileView } from "../upload/lib/uploads";
 import SpendingChart, {
   type BucketChartPoint,
   type BucketMeta,
@@ -9,9 +8,11 @@ import SpendingChart, {
   type GroupMode,
   type TotalsDisplayRow,
 } from "./SpendingChart";
-import TransactionList, { type SortKey, type SortState } from "./TransactionList";
-import ManageModal, { type ManageTab } from "./ManageModal";
-import { buildBankSeries, buildChartSeries, parseDate, resolveBucketKey, type ChartRange } from "./lib/transactionSummary";
+import TransactionList, { sortTransactions, type SortKey, type SortState } from "./TransactionList";
+import ManageModal from "./ManageModal";
+import { useBucketsAndCategories } from "./lib/useBucketsAndCategories";
+import { buildCategoryOptionsByBucket } from "./lib/categoryOptions";
+import { buildBankSeries, buildChartSeries, resolveBucketKey, type ChartRange } from "./lib/transactionSummary";
 import type { BankRecord } from "./lib/banks";
 import { computeDivergingScale } from "./lib/chartScale";
 import {
@@ -19,13 +20,9 @@ import {
   DEFAULT_CATEGORIES,
   applyCategoryRecords,
   deriveCategoryList,
-  generateCategoryId,
   getCategoryBucketColor,
-  getCategoryColor,
   getCategoryLabel,
-  isReservedCategory,
   isTransferCategory,
-  nextBucketColor,
   INCOME_BUCKET_ID,
   UNCLASSIFIED_BUCKET_COLOR,
   UNCLASSIFIED_BUCKET_ID,
@@ -36,22 +33,6 @@ import {
   type CategoryRecord,
   type BucketRecord,
 } from "./lib/categories";
-function sortValue(transaction: ImportedTransaction, key: SortKey): string | number {
-  switch (key) {
-    case "date":
-      return parseDate(transaction.date)?.getTime() ?? Number.NEGATIVE_INFINITY;
-    case "amount":
-      return transaction.amount;
-    case "bank":
-      return transaction.sourceBank.toLowerCase();
-    case "category":
-      return getCategoryLabel(transaction.category).toLowerCase();
-    case "description":
-    default:
-      return transaction.description.toLowerCase();
-  }
-}
-
 function SpendingPage() {
   const [uploads, setUploads] = useState<UploadedFileView[]>([]);
   const [chartRange, setChartRange] = useState<ChartRange>("month");
@@ -65,9 +46,8 @@ function SpendingPage() {
   const [categoryRecords, setCategoryRecords] = useState<CategoryRecord[]>([]);
   const [buckets, setBuckets] = useState<BucketRecord[]>([]);
   const [bankRecords, setBankRecords] = useState<BankRecord[]>([]);
-  // The single manage modal (Upload / Banks / Buckets & Categories tabs). null = closed; a tab id
-  // opens it straight to that tab.
-  const [manageTab, setManageTab] = useState<ManageTab | null>(null);
+  // The Buckets & Categories settings modal.
+  const [manageOpen, setManageOpen] = useState(false);
 
   useEffect(() => {
     invoke<UploadedFileView[]>("list_uploads")
@@ -146,65 +126,11 @@ function SpendingPage() {
     [buckets, categoryList, categoryRecords],
   );
 
-  const categoryOptionsByBucket = useMemo(() => {
-    const bucketOrder = new Map(
-      buckets
-        .slice()
-        .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
-        .map((bucket, index) => [bucket.id, { bucketLabel: bucket.name, index }]),
-    );
-    const grouped = new Map<string, { bucketLabel: string; options: { value: string; label: string }[] }>();
-
-    const addOption = (bucketId: string | null, bucketLabel: string, category: string) => {
-      const target = bucketId && bucketOrder.has(bucketId) ? bucketId : "__ungrouped";
-      const existing = grouped.get(target) ?? { bucketLabel, options: [] };
-      existing.options.push({ value: category, label: getCategoryLabel(category) });
-      grouped.set(target, existing);
-    };
-
-    const realBucketIds = new Set(buckets.map((bucket) => bucket.id));
-    Array.from(new Set(categoryList)).forEach((category) => {
-      const record = categoryRecords.find((item) => item.id === category);
-      if (record?.excluded) {
-        return;
-      }
-
-      if (category === UNCLASSIFIED_CATEGORY) {
-        addOption(null, "Unclassified", category);
-        return;
-      }
-
-      const bucketId = record?.bucketId && realBucketIds.has(record.bucketId) ? record.bucketId : null;
-      addOption(bucketId, bucketId ? bucketOrder.get(bucketId)?.bucketLabel ?? "Ungrouped" : "Ungrouped", category);
-    });
-
-    const orderedGroups = Array.from(grouped.entries()).map(([bucketId, group]) => ({
-      bucketLabel: group.bucketLabel,
-      options: group.options.sort((a, b) => a.label.localeCompare(b.label)),
-      bucketId,
-    }));
-
-    orderedGroups.sort((a, b) => {
-      const aIndex = a.bucketId === "__ungrouped" ? Number.MAX_SAFE_INTEGER : bucketOrder.get(a.bucketId)?.index ?? Number.MAX_SAFE_INTEGER;
-      const bIndex = b.bucketId === "__ungrouped" ? Number.MAX_SAFE_INTEGER : bucketOrder.get(b.bucketId)?.index ?? Number.MAX_SAFE_INTEGER;
-      return aIndex - bIndex;
-    });
-
-    return orderedGroups.map(({ bucketLabel, options }) => ({ bucketLabel, options }));
-  }, [buckets, categoryList, categoryRecords, hasUnclassified]);
-
-  // Current categories (id + label) used to match imported/typed category text back to an
-  // existing category instead of creating a duplicate.
-  const knownCategories = useMemo(() => {
-    const recordIds = new Set(categoryRecords.map((record) => record.id));
-    const known = categoryRecords.map((record) => ({ id: record.id, label: record.label }));
-    categoryList.forEach((id) => {
-      if (!recordIds.has(id) && !isReservedCategory(id)) {
-        known.push({ id, label: getCategoryLabel(id) });
-      }
-    });
-    return known;
-  }, [categoryRecords, categoryList]);
+  const categoryOptionsByBucket = useMemo(
+    () => buildCategoryOptionsByBucket(categoryList, categoryRecords, buckets),
+    // hasUnclassified is already folded into categoryList; categoryRecords drives label renames.
+    [buckets, categoryList, categoryRecords],
+  );
 
   useEffect(() => {
     setSelectedCategories((current) => {
@@ -503,15 +429,7 @@ function SpendingPage() {
       return tableTransactions;
     }
 
-    const direction = tableSort.direction === "asc" ? 1 : -1;
-    return [...tableTransactions].sort((a, b) => {
-      const aValue = sortValue(a, tableSort.key);
-      const bValue = sortValue(b, tableSort.key);
-      if (typeof aValue === "number" && typeof bValue === "number") {
-        return (aValue - bValue) * direction;
-      }
-      return String(aValue).localeCompare(String(bValue)) * direction;
-    });
+    return sortTransactions(tableTransactions, tableSort);
     // categoryRecords is a dependency because sorting by category uses its (possibly renamed) label.
   }, [tableTransactions, tableSort, categoryRecords]);
 
@@ -624,347 +542,27 @@ function SpendingPage() {
     });
   };
 
-  const persistUpload = async (
-    bankName: string,
-    fileName: string,
-    transactions: ImportedTransaction[],
-  ): Promise<boolean> => {
-    const upload: UploadedFileView = {
-      id: `${fileName}-${crypto.randomUUID()}`,
-      bankName,
-      fileName,
-      // The DB fills imported_at via its default; mirror it here for the optimistic row.
-      importedAt: new Date().toISOString(),
-      transactions,
-    };
-
-    try {
-      await invoke("add_upload", {
-        id: upload.id,
-        bankName: upload.bankName,
-        fileName: upload.fileName,
-        transactions: upload.transactions,
-      });
-      // Income rules run as the upload is stored, so re-read it to show their categories.
-      const stored = await invoke<UploadedFileView[]>("list_uploads").catch(() => null);
-      setUploads(stored ?? ((current) => [upload, ...current]));
-      return true;
-    } catch (error) {
-      console.error("Failed to save upload to the database", error);
-      setDbError("Couldn't save that upload to the database.");
-      return false;
-    }
-  };
-
-  const handleDeleteUpload = async (uploadId: string) => {
-    const previousUploads = uploads;
-    setUploads((current) => current.filter((upload) => upload.id !== uploadId));
-
-    try {
-      await invoke("delete_upload", { id: uploadId });
-    } catch (error) {
-      console.error("Failed to delete upload from the database", error);
-      setDbError("Couldn't delete that upload from the database.");
-      setUploads(previousUploads);
-    }
-  };
-
-  const handleRenameUpload = (uploadId: string, fileName: string) => {
-    const previousUploads = uploads;
-    setUploads((current) =>
-      current.map((upload) => (upload.id === uploadId ? { ...upload, fileName } : upload)),
-    );
-
-    invoke("rename_upload", { id: uploadId, fileName }).catch((error) => {
-      console.error("Failed to rename the upload in the database", error);
-      setDbError("Couldn't save that file name change to the database.");
-      setUploads(previousUploads);
-    });
-  };
-
-  const handleAddCategory = (label: string, color: string) => {
-    const previousRecords = categoryRecords;
-    const id = generateCategoryId(label, categoryRecords.map((record) => record.id));
-    setCategoryRecords((current) => [
-      ...current,
-      { id, label, color, excluded: false, bucketId: null, position: 0 },
-    ]);
-
-    invoke("upsert_category", { id, label, color }).catch((error) => {
-      console.error("Failed to save the new category to the database", error);
-      setDbError("Couldn't save that category to the database.");
-      setCategoryRecords(previousRecords);
-    });
-  };
-
-  const handleUpdateCategory = (id: string, label: string, color: string) => {
-    const previousRecords = categoryRecords;
-    setCategoryRecords((current) => {
-      const exists = current.some((record) => record.id === id);
-      return exists
-        ? current.map((record) => (record.id === id ? { ...record, label, color } : record))
-        : [...current, { id, label, color, excluded: false, bucketId: null, position: 0 }];
-    });
-
-    invoke("upsert_category", { id, label, color }).catch((error) => {
-      console.error("Failed to save the category change to the database", error);
-      setDbError("Couldn't save that category change to the database.");
-      setCategoryRecords(previousRecords);
-    });
-  };
-
-  const handleDeleteCategory = (id: string) => {
-    const previousRecords = categoryRecords;
-    const previousUploads = uploads;
-
-    setCategoryRecords((current) => current.filter((record) => record.id !== id));
-    setSelectedCategories((current) => current.filter((category) => category !== id));
-    setUploads((current) =>
-      current.map((upload) => ({
-        ...upload,
-        transactions: upload.transactions.map((transaction) =>
-          transaction.category === id ? { ...transaction, category: "unclassified" } : transaction,
-        ),
-      })),
-    );
-
-    invoke("delete_category", { id }).catch((error) => {
-      console.error("Failed to delete the category from the database", error);
-      setDbError("Couldn't delete that category from the database.");
-      setCategoryRecords(previousRecords);
-      setUploads(previousUploads);
-    });
-  };
-
-  const handleAddBank = (name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      return;
-    }
-    const previousBanks = bankRecords;
-    const id = crypto.randomUUID();
-    setBankRecords((current) => [...current, { id, name: trimmed, logoDataUrl: null, spendingPositive: true }]);
-
-    invoke("upsert_bank", { id, name: trimmed, logoDataUrl: null }).catch((error) => {
-      console.error("Failed to save the new bank to the database", error);
-      setDbError("Couldn't save that bank to the database.");
-      setBankRecords(previousBanks);
-    });
-  };
-
-  const handleUpdateBank = (id: string, name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      return;
-    }
-    const previousBanks = bankRecords;
-    const current = bankRecords.find((bank) => bank.id === id);
-    setBankRecords((records) =>
-      records.map((bank) => (bank.id === id ? { ...bank, name: trimmed } : bank)),
-    );
-
-    invoke("upsert_bank", { id, name: trimmed, logoDataUrl: current?.logoDataUrl ?? null }).catch((error) => {
-      console.error("Failed to save the bank rename to the database", error);
-      setDbError("Couldn't save that bank change to the database.");
-      setBankRecords(previousBanks);
-    });
-  };
-
-  const handleDeleteBank = (id: string) => {
-    const previousBanks = bankRecords;
-    setBankRecords((current) => current.filter((bank) => bank.id !== id));
-
-    invoke("delete_bank", { id }).catch((error) => {
-      console.error("Failed to delete the bank from the database", error);
-      setDbError("Couldn't delete that bank from the database.");
-      setBankRecords(previousBanks);
-    });
-  };
-
-  const handleSetBankLogo = (id: string, logoDataUrl: string | null) => {
-    const previousBanks = bankRecords;
-    const name = bankRecords.find((bank) => bank.id === id)?.name ?? "";
-    if (!name) {
-      return;
-    }
-    setBankRecords((current) =>
-      current.map((bank) => (bank.id === id ? { ...bank, logoDataUrl } : bank)),
-    );
-
-    invoke("upsert_bank", { id, name, logoDataUrl }).catch((error) => {
-      console.error("Failed to save the bank logo to the database", error);
-      setDbError("Couldn't save that bank logo to the database.");
-      setBankRecords(previousBanks);
-    });
-  };
-
-  const handleSetBankSpendingPositive = (id: string, spendingPositive: boolean) => {
-    const previousBanks = bankRecords;
-    setBankRecords((current) =>
-      current.map((bank) => (bank.id === id ? { ...bank, spendingPositive } : bank)),
-    );
-
-    invoke("set_bank_spending_positive", { id, spendingPositive }).catch((error) => {
-      console.error("Failed to save the bank's amount sign to the database", error);
-      setDbError("Couldn't save that bank setting to the database.");
-      setBankRecords(previousBanks);
-    });
-  };
-
-  const handleAddBucket = (name: string) => {
-    const previousBuckets = buckets;
-    const id = crypto.randomUUID();
-    const color = nextBucketColor(buckets.length);
-    // New buckets land at the end of the order, matching upsert_bucket's MAX + 1 on the DB side.
-    const position = buckets.reduce((max, bucket) => Math.max(max, bucket.position), -1) + 1;
-    setBuckets((current) => [...current, { id, name, color, position }]);
-
-    invoke("upsert_bucket", { id, name, color }).catch((error) => {
-      console.error("Failed to save the new bucket to the database", error);
-      setDbError("Couldn't save that bucket to the database.");
-      setBuckets(previousBuckets);
-    });
-  };
-
-  const handleRenameBucket = (id: string, name: string) => {
-    const previousBuckets = buckets;
-    const color = buckets.find((bucket) => bucket.id === id)?.color ?? nextBucketColor(buckets.length);
-    setBuckets((current) => current.map((bucket) => (bucket.id === id ? { ...bucket, name } : bucket)));
-
-    invoke("upsert_bucket", { id, name, color }).catch((error) => {
-      console.error("Failed to rename the bucket in the database", error);
-      setDbError("Couldn't save that bucket to the database.");
-      setBuckets(previousBuckets);
-    });
-  };
-
-  const handleSetBucketColor = (id: string, color: string) => {
-    const previousBuckets = buckets;
-    const name = buckets.find((bucket) => bucket.id === id)?.name;
-    if (name === undefined) {
-      return;
-    }
-    setBuckets((current) => current.map((bucket) => (bucket.id === id ? { ...bucket, color } : bucket)));
-
-    invoke("upsert_bucket", { id, name, color }).catch((error) => {
-      console.error("Failed to save the bucket color to the database", error);
-      setDbError("Couldn't save that bucket change to the database.");
-      setBuckets(previousBuckets);
-    });
-  };
-
-  const handleDeleteBucket = (id: string) => {
-    const previousBuckets = buckets;
-    const previousRecords = categoryRecords;
-
-    setBuckets((current) => current.filter((bucket) => bucket.id !== id));
-    setCategoryRecords((current) =>
-      current.map((record) => (record.bucketId === id ? { ...record, bucketId: null } : record)),
-    );
-
-    invoke("delete_bucket", { id }).catch((error) => {
-      console.error("Failed to delete the bucket from the database", error);
-      setDbError("Couldn't delete that bucket from the database.");
-      setBuckets(previousBuckets);
-      setCategoryRecords(previousRecords);
-    });
-  };
-
-  // Reorder the buckets to the given id order (dragged in the manager); drives the section order
-  // in the Spending by Month table and the stacked bars.
-  const handleReorderBuckets = (orderedIds: string[]) => {
-    const previousBuckets = buckets;
-    const positionById = new Map(orderedIds.map((id, index) => [id, index]));
-    setBuckets((current) =>
-      current.map((bucket) =>
-        positionById.has(bucket.id) ? { ...bucket, position: positionById.get(bucket.id)! } : bucket,
-      ),
-    );
-
-    invoke("set_bucket_positions", { ids: orderedIds }).catch((error) => {
-      console.error("Failed to save the bucket order to the database", error);
-      setDbError("Couldn't save that bucket order to the database.");
-      setBuckets(previousBuckets);
-    });
-  };
-
-  // A category lives in one place: a bucket, the Ungrouped tray (bucketId null), or the
-  // Exclude tray (excluded true, left out of the spending chart/totals). Bucket and excluded
-  // are mutually exclusive, so both are written together. When dropping into a bucket the caller
-  // also passes `orderedBucketIds` — that bucket's full member order after the move — which sets
-  // each member's position (the order shown in the Spending by Month table).
-  const handlePlaceCategory = (
-    categoryId: string,
-    bucketId: string | null,
-    excluded: boolean,
-    orderedBucketIds?: string[],
-  ) => {
-    const previousRecords = categoryRecords;
-    const existing = categoryRecords.find((record) => record.id === categoryId);
-    const label = existing?.label ?? getCategoryLabel(categoryId);
-    const color = existing?.color ?? getCategoryColor(categoryId);
-    const positionById = orderedBucketIds
-      ? new Map(orderedBucketIds.map((id, index) => [id, index]))
-      : null;
-
-    setCategoryRecords((current) => {
-      const withMoved = current.some((record) => record.id === categoryId)
-        ? current.map((record) => (record.id === categoryId ? { ...record, bucketId, excluded } : record))
-        : [
-            ...current,
-            { id: categoryId, label, color, excluded, bucketId, position: positionById?.get(categoryId) ?? 0 },
-          ];
-      return positionById
-        ? withMoved.map((record) =>
-            positionById.has(record.id) ? { ...record, position: positionById.get(record.id)! } : record,
-          )
-        : withMoved;
-    });
-
-    // Persist the placement first (it creates the row for a transaction-only category), then the
-    // positions, so the reorder update always lands on an existing row.
-    invoke("set_category_placement", { id: categoryId, label, color, excluded, bucketId })
-      .then(() => (orderedBucketIds ? invoke("set_category_positions", { ids: orderedBucketIds }) : undefined))
-      .catch((error) => {
-        console.error("Failed to save the category placement to the database", error);
-        setDbError("Couldn't save that category change to the database.");
-        setCategoryRecords(previousRecords);
-      });
-  };
-
-  // Shared by the Uploads-page panel and the Spending-page settings modal.
-  const bucketsAndCategoriesProps = {
-    categories: categoryRecords,
+  // Shared by the Spending-page settings modal and the Sankey page's.
+  const bucketsAndCategoriesProps = useBucketsAndCategories({
     buckets,
-    onAdd: handleAddCategory,
-    onUpdate: handleUpdateCategory,
-    onDelete: handleDeleteCategory,
-    onAddBucket: handleAddBucket,
-    onRenameBucket: handleRenameBucket,
-    onSetBucketColor: handleSetBucketColor,
-    onDeleteBucket: handleDeleteBucket,
-    onReorderBuckets: handleReorderBuckets,
-    onPlaceCategory: handlePlaceCategory,
-  };
-
-  // Shared by the Uploads-page panel and the Spending-page upload modal.
-  const bankReportUploadProps = {
-    uploads,
-    knownCategories,
-    bankRecords,
-    onImport: persistUpload,
-    onDeleteUpload: handleDeleteUpload,
-    onRenameUpload: handleRenameUpload,
-  };
-
-  const bankSettingsProps = {
-    banks: bankRecords,
-    onAddBank: handleAddBank,
-    onUpdateBank: handleUpdateBank,
-    onDeleteBank: handleDeleteBank,
-    onSetBankLogo: handleSetBankLogo,
-    onSetBankSpendingPositive: handleSetBankSpendingPositive,
-  };
+    setBuckets,
+    categoryRecords,
+    setCategoryRecords,
+    onError: setDbError,
+    onCategoryRemoved: (id) => {
+      const previousUploads = uploads;
+      setSelectedCategories((current) => current.filter((category) => category !== id));
+      setUploads((current) =>
+        current.map((upload) => ({
+          ...upload,
+          transactions: upload.transactions.map((transaction) =>
+            transaction.category === id ? { ...transaction, category: "unclassified" } : transaction,
+          ),
+        })),
+      );
+      return () => setUploads(previousUploads);
+    },
+  });
 
   return (
     <>
@@ -989,7 +587,7 @@ function SpendingPage() {
             onToggleBucketSegment={toggleBucketSegment}
             onToggleCategoryFilter={toggleCategoryFilter}
             onToggleBucketFilter={toggleBucketFilter}
-            onOpenSettings={() => setManageTab("buckets")}
+            onOpenSettings={() => setManageOpen(true)}
           />
 
           <TransactionList
@@ -1015,12 +613,9 @@ function SpendingPage() {
         </div>
       </section>
 
-      {manageTab && (
+      {manageOpen && (
         <ManageModal
-          initialTab={manageTab}
-          onClose={() => setManageTab(null)}
-          upload={bankReportUploadProps}
-          bank={bankSettingsProps}
+          onClose={() => setManageOpen(false)}
           buckets={bucketsAndCategoriesProps}
         />
       )}

@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
-import type { BankRecord } from "./lib/banks";
+import type { BankRecord } from "../spending/lib/banks";
 
 export type BankSettingsProps = {
   banks: BankRecord[];
@@ -7,7 +7,6 @@ export type BankSettingsProps = {
   onUpdateBank: (id: string, name: string) => void;
   onDeleteBank: (id: string) => void;
   onSetBankLogo: (id: string, logoDataUrl: string | null) => void;
-  onSetBankSpendingPositive: (id: string, spendingPositive: boolean) => void;
 };
 
 function TrashIcon() {
@@ -41,7 +40,6 @@ function BankSettings({
   onUpdateBank,
   onDeleteBank,
   onSetBankLogo,
-  onSetBankSpendingPositive,
 }: BankSettingsProps) {
   const [newBankName, setNewBankName] = useState("");
 
@@ -73,8 +71,8 @@ function BankSettings({
       <div className="bank-settings__header">
         <h2>Banks</h2>
         <p>
-          Set the banks you use, upload each bank’s logo so the spending table can show them clearly, and say
-          how its statements sign amounts so deposits and spending are told apart on the overview.
+          Set the banks you use and upload each bank’s logo so the spending table can show them clearly.
+          How a bank’s statements sign amounts is set when you import a file.
         </p>
       </div>
 
@@ -87,7 +85,6 @@ function BankSettings({
               <tr>
                 <th className="bank-settings-table__logo-col">Logo</th>
                 <th>Bank</th>
-                <th>Spending shows as</th>
                 <th className="uploads-table__actions" aria-label="Remove" />
               </tr>
             </thead>
@@ -133,16 +130,6 @@ function BankSettings({
                         }
                       }}
                     />
-                  </td>
-                  <td>
-                    <select
-                      aria-label={`How ${bank.name} signs spending`}
-                      value={bank.spendingPositive ? "positive" : "negative"}
-                      onChange={(event) => onSetBankSpendingPositive(bank.id, event.target.value === "positive")}
-                    >
-                      <option value="positive">Positive (card charges)</option>
-                      <option value="negative">Negative (checking debits)</option>
-                    </select>
                   </td>
                   <td className="uploads-table__actions">
                     <button

@@ -377,10 +377,16 @@ export function buildFlow(input: FlowInput): FlowResult {
       amount: round2(spendingAmounts.get(UNCLASSIFIED_KEY) ?? 0),
     },
   );
-  // Buckets that net out to nothing or less (refunds) don't draw.
+  // Buckets that net out to nothing don't draw. One that nets out below zero (refunds and
+  // reimbursements outweighing what was spent) can't be a flow out of Net pay, so it's drawn as
+  // money coming back into it. Spending is the net of all of them, matching the Spending page.
   const drawnSpending = spendingEntries.filter((entry) => entry.amount > 0);
+  const refundEntries = spendingEntries.filter((entry) => entry.amount < 0);
+  const refunds = round2(
+    refundEntries.reduce((sum, entry) => sum - entry.amount, 0),
+  );
   const spending = round2(
-    drawnSpending.reduce((sum, entry) => sum + entry.amount, 0),
+    spendingEntries.reduce((sum, entry) => sum + entry.amount, 0),
   );
 
   // Each spending bucket's categories with money in them, in the order the Spending page lists them.
@@ -404,7 +410,7 @@ export function buildFlow(input: FlowInput): FlowResult {
 
   const leftover = Math.max(0, round2(net - spending));
   const shortfall = Math.max(0, round2(spending - net));
-  const total = round2(gross + shortfall);
+  const total = round2(gross + shortfall + refunds);
 
   if (total <= 0) {
     return {
@@ -502,7 +508,7 @@ export function buildFlow(input: FlowInput): FlowResult {
     });
   }
 
-  const netNodeValue = round2(net + shortfall);
+  const netNodeValue = round2(net + shortfall + refunds);
   if (netNodeValue > 0) {
     addNode(
       {
@@ -511,7 +517,7 @@ export function buildFlow(input: FlowInput): FlowResult {
         color: NET_COLOR,
         kind: "net",
         value: netNodeValue,
-        expandable: spending > 0 || leftover > 0,
+        expandable: spending > 0 || leftover > 0 || refunds > 0,
         expanded: netOpen,
       },
       2,
@@ -530,6 +536,28 @@ export function buildFlow(input: FlowInput): FlowResult {
         target: NET_ID,
         value: shortfall,
         color: SHORTFALL_COLOR,
+      });
+    }
+    for (const entry of refundEntries) {
+      const id = spendingNodeId(entry.key);
+      const value = round2(-entry.amount);
+      addNode(
+        {
+          id,
+          label: entry.name,
+          color: entry.color,
+          kind: "spending",
+          value,
+        },
+        1,
+      );
+      links.push({ source: id, target: NET_ID, value, color: entry.color });
+      sources.set(id, {
+        title: entry.name,
+        note: "Refunds and reimbursements outweighed spending in this bucket, so it adds money back to Net pay. Bank transactions as money out (+) or in (−).",
+        total: entry.amount,
+        lines: [],
+        transactions: newestFirst(spendingTransactions.get(entry.key) ?? []),
       });
     }
     sources.set(NET_ID, {

@@ -1,18 +1,52 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ImportedTransaction } from "./lib/csvParser";
+import type { ImportedTransaction } from "../upload/lib/csvParser";
 import {
   RESERVED_CATEGORIES,
   getCategoryColor,
   getCategoryLabel,
   type Category,
 } from "./lib/categories";
-import { buildBankLogoMap, normalizeBankName, type BankRecord } from "./lib/banks";
+import {
+  buildBankLogoMap,
+  normalizeBankName,
+  type BankRecord,
+} from "./lib/banks";
 import { currencyFormatter } from "./lib/format";
+import { parseDate } from "./lib/transactionSummary";
 import MultiSelectFilter from "./MultiSelectFilter";
 
 export type SortKey = "date" | "description" | "bank" | "amount" | "category";
 export type SortDirection = "asc" | "desc";
 export type SortState = { key: SortKey; direction: SortDirection };
+
+function sortValue(transaction: ImportedTransaction, key: SortKey): string | number {
+  switch (key) {
+    case "date":
+      return parseDate(transaction.date)?.getTime() ?? Number.NEGATIVE_INFINITY;
+    case "amount":
+      return transaction.amount;
+    case "bank":
+      return transaction.sourceBank.toLowerCase();
+    case "category":
+      return getCategoryLabel(transaction.category).toLowerCase();
+    case "description":
+    default:
+      return transaction.description.toLowerCase();
+  }
+}
+
+// Orders transactions for the table; callers pass the result back in as `transactions`.
+export function sortTransactions(transactions: ImportedTransaction[], sort: SortState): ImportedTransaction[] {
+  const direction = sort.direction === "asc" ? 1 : -1;
+  return [...transactions].sort((a, b) => {
+    const aValue = sortValue(a, sort.key);
+    const bValue = sortValue(b, sort.key);
+    if (typeof aValue === "number" && typeof bValue === "number") {
+      return (aValue - bValue) * direction;
+    }
+    return String(aValue).localeCompare(String(bValue)) * direction;
+  });
+}
 
 const SORT_COLUMNS: { key: SortKey; label: string }[] = [
   { key: "date", label: "Date" },
@@ -34,6 +68,9 @@ type TransactionListProps = {
   selectedBucketLabel: string | null;
   selectedBucketName: string | null;
   onClearFilter: () => void;
+  // Put the "Filtered to" chip under the search and filters instead of above them, so the search
+  // bar keeps its place whether or not a filter is on.
+  filterBelowTools?: boolean;
   sort: SortState | null;
   onToggleSort: (key: SortKey) => void;
   // Suggestions for the per-row category input.
@@ -50,6 +87,9 @@ type TransactionListProps = {
   onCategoryChange: (transactionId: string, category: Category) => void;
   // Apply one category to many transactions at once (bulk update).
   onBulkCategoryChange: (transactionIds: string[], category: Category) => void;
+  // When given, transactions flagged autoCategorized are highlighted and can be confirmed
+  // (marked reviewed) one at a time or all at once.
+  onConfirmAutoCategorized?: (transactionIds: string[]) => void;
 };
 
 // The right-hand column of the Spending view: an active-filter banner (driven by the chart's
@@ -64,6 +104,7 @@ function TransactionList({
   selectedBucketLabel,
   selectedBucketName,
   onClearFilter,
+  filterBelowTools = false,
   sort,
   onToggleSort,
   categoryList,
@@ -73,6 +114,7 @@ function TransactionList({
   bankRecords,
   onCategoryChange,
   onBulkCategoryChange,
+  onConfirmAutoCategorized,
 }: TransactionListProps) {
   const [search, setSearch] = useState("");
   // Bulk-update mode: a checkbox column appears and a toolbar applies one category to all
@@ -83,8 +125,18 @@ function TransactionList({
   const [bulkCategory, setBulkCategory] = useState("");
   // Unchecked values per filter; empty set means that field isn't narrowing anything.
   const [excludedBanks, setExcludedBanks] = useState<Set<string>>(new Set());
-  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
+  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(
+    new Set(),
+  );
+  const [reviewOnly, setReviewOnly] = useState(false);
   const query = search.trim().toLowerCase();
+  const reviewIds = useMemo(
+    () =>
+      onConfirmAutoCategorized
+        ? transactions.filter((transaction) => transaction.autoCategorized).map((transaction) => transaction.id)
+        : [],
+    [transactions, onConfirmAutoCategorized],
+  );
 
   // Keep the Category filter's unchecked set in sync with the Exclude bucket: uncheck a category
   // when it joins the bucket, re-check it when it leaves. We diff against the ids we last applied
@@ -109,28 +161,46 @@ function TransactionList({
 
   // Dropdown options come from the transactions actually in view (deduped + sorted by label).
   const bankOptions = useMemo(() => {
-    const banks = Array.from(new Set(transactions.map((transaction) => transaction.sourceBank)));
+    const banks = Array.from(
+      new Set(transactions.map((transaction) => transaction.sourceBank)),
+    );
     return banks
       .sort((a, b) => a.localeCompare(b))
       .map((bank) => ({ value: bank, label: bank }));
   }, [transactions]);
 
   const categoryOptions = useMemo(() => {
-    const categories = Array.from(new Set(transactions.map((transaction) => transaction.category)));
+    const categories = Array.from(
+      new Set(transactions.map((transaction) => transaction.category)),
+    );
     return categories
-      .map((category) => ({ value: category, label: getCategoryLabel(category) }))
+      .map((category) => ({
+        value: category,
+        label: getCategoryLabel(category),
+      }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [transactions]);
 
-  const hasLocalFilter = query !== "" || excludedBanks.size > 0 || excludedCategories.size > 0;
-  const bankLogoByName = useMemo(() => buildBankLogoMap(bankRecords), [bankRecords]);
+  const hasLocalFilter =
+    query !== "" ||
+    excludedBanks.size > 0 ||
+    excludedCategories.size > 0 ||
+    (reviewOnly && reviewIds.length > 0);
+  const bankLogoByName = useMemo(
+    () => buildBankLogoMap(bankRecords),
+    [bankRecords],
+  );
 
   // Description search + bank/category filters, applied locally on top of the shell's filter/sort.
   const visibleTransactions = useMemo(() => {
-    if (!hasLocalFilter) {
+    if (!hasLocalFilter && !(reviewOnly && reviewIds.length > 0)) {
       return transactions;
     }
+    const showOnlyReview = reviewOnly && reviewIds.length > 0;
     return transactions.filter((transaction) => {
+      if (showOnlyReview && !transaction.autoCategorized) {
+        return false;
+      }
       if (query && !transaction.description.toLowerCase().includes(query)) {
         return false;
       }
@@ -142,13 +212,16 @@ function TransactionList({
       }
       return true;
     });
-  }, [transactions, query, excludedBanks, excludedCategories, hasLocalFilter]);
+  }, [transactions, query, excludedBanks, excludedCategories, hasLocalFilter, reviewOnly, reviewIds]);
 
   // Keep the footer total in sync with the rows actually shown after filtering.
   const visibleTotal = useMemo(
     () =>
       hasLocalFilter
-        ? visibleTransactions.reduce((sum, transaction) => sum + transaction.amount, 0)
+        ? visibleTransactions.reduce(
+            (sum, transaction) => sum + transaction.amount,
+            0,
+          )
         : total,
     [hasLocalFilter, visibleTransactions, total],
   );
@@ -156,18 +229,23 @@ function TransactionList({
   // Selections only ever act on rows the user can currently see, so a stale id left behind by a
   // filter/sort change never silently recategorizes something off-screen.
   const selectedVisibleIds = useMemo(
-    () => visibleTransactions.filter((transaction) => selectedIds.has(transaction.id)).map((t) => t.id),
+    () =>
+      visibleTransactions
+        .filter((transaction) => selectedIds.has(transaction.id))
+        .map((t) => t.id),
     [visibleTransactions, selectedIds],
   );
   const selectedVisibleCount = selectedVisibleIds.length;
   const allVisibleSelected =
-    visibleTransactions.length > 0 && selectedVisibleCount === visibleTransactions.length;
+    visibleTransactions.length > 0 &&
+    selectedVisibleCount === visibleTransactions.length;
 
   // Drive the header checkbox's indeterminate state (no HTML attribute exists for it).
   const selectAllRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (selectAllRef.current) {
-      selectAllRef.current.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected;
+      selectAllRef.current.indeterminate =
+        selectedVisibleCount > 0 && !allVisibleSelected;
     }
   }, [selectedVisibleCount, allVisibleSelected]);
 
@@ -190,7 +268,11 @@ function TransactionList({
   };
 
   const toggleSelectAll = () => {
-    setSelectedIds(allVisibleSelected ? new Set() : new Set(visibleTransactions.map((t) => t.id)));
+    setSelectedIds(
+      allVisibleSelected
+        ? new Set()
+        : new Set(visibleTransactions.map((t) => t.id)),
+    );
   };
 
   const applyBulkCategory = () => {
@@ -205,23 +287,30 @@ function TransactionList({
 
   const footerColSpan = SORT_COLUMNS.length - 1 + (bulkMode ? 1 : 0);
 
+  const filterChip =
+    selectedBucketKey || selectedCategory || selectedBucketId ? (
+      <div className="import-shell__table-filter">
+        <span>
+          Filtered to{" "}
+          {selectedBucketKey && <strong>{selectedBucketLabel}</strong>}
+          {selectedBucketKey && (selectedCategory || selectedBucketId) && " · "}
+          {selectedCategory && (
+            <strong>{getCategoryLabel(selectedCategory)}</strong>
+          )}
+          {selectedBucketId && selectedBucketName && (
+            <strong>{selectedBucketName}</strong>
+          )}
+        </span>
+        <button type="button" onClick={onClearFilter}>
+          Clear
+        </button>
+      </div>
+    ) : null;
+
   return (
     <>
       <div className="import-shell__master-right">
-        {(selectedBucketKey || selectedCategory || selectedBucketId) && (
-          <div className="import-shell__table-filter">
-            <span>
-              Filtered to{" "}
-              {selectedBucketKey && <strong>{selectedBucketLabel}</strong>}
-              {selectedBucketKey && (selectedCategory || selectedBucketId) && " · "}
-              {selectedCategory && <strong>{getCategoryLabel(selectedCategory)}</strong>}
-              {selectedBucketId && selectedBucketName && <strong>{selectedBucketName}</strong>}
-            </span>
-            <button type="button" onClick={onClearFilter}>
-              Clear
-            </button>
-          </div>
-        )}
+        {!filterBelowTools && filterChip}
 
         {hasAnyTransactions && (
           <div className="import-shell__table-tools">
@@ -250,6 +339,28 @@ function TransactionList({
               onClick={toggleBulkMode}
             >
               {bulkMode ? "Cancel" : "Bulk update"}
+            </button>
+          </div>
+        )}
+
+        {filterBelowTools && filterChip}
+
+        {onConfirmAutoCategorized && reviewIds.length > 0 && (
+          <div className="import-shell__review-banner" role="status">
+            <span>
+              <strong>{reviewIds.length}</strong> auto-categorized from earlier transactions — review the
+              highlighted rows.
+            </span>
+            <label className="import-shell__review-toggle">
+              <input
+                type="checkbox"
+                checked={reviewOnly}
+                onChange={(event) => setReviewOnly(event.target.checked)}
+              />
+              Only show these
+            </label>
+            <button type="button" onClick={() => onConfirmAutoCategorized(reviewIds)}>
+              Mark all reviewed
             </button>
           </div>
         )}
@@ -311,7 +422,8 @@ function TransactionList({
                     </th>
                   )}
                   {SORT_COLUMNS.map((column) => {
-                    const activeSort = sort && sort.key === column.key ? sort : null;
+                    const activeSort =
+                      sort && sort.key === column.key ? sort : null;
                     const ariaSort = activeSort
                       ? activeSort.direction === "asc"
                         ? "ascending"
@@ -335,8 +447,15 @@ function TransactionList({
                           onClick={() => onToggleSort(column.key)}
                         >
                           {column.label}
-                          <span className="import-shell__sort-caret" aria-hidden="true">
-                            {activeSort ? (activeSort.direction === "asc" ? "↑" : "↓") : "↓"}
+                          <span
+                            className="import-shell__sort-caret"
+                            aria-hidden="true"
+                          >
+                            {activeSort
+                              ? activeSort.direction === "asc"
+                                ? "↑"
+                                : "↓"
+                              : "↓"}
                           </span>
                         </button>
                       </th>
@@ -347,25 +466,41 @@ function TransactionList({
               <tbody>
                 {visibleTransactions.map((transaction) => {
                   const categoryColor =
-                    bucketColorByCategory[transaction.category] ?? getCategoryColor(transaction.category);
-                  const selectedCategoryLabel = getCategoryLabel(transaction.category);
+                    bucketColorByCategory[transaction.category] ??
+                    getCategoryColor(transaction.category);
+                  const selectedCategoryLabel = getCategoryLabel(
+                    transaction.category,
+                  );
 
                   return (
                     <tr
                       key={transaction.id}
                       className={
-                        bulkMode
-                          ? `import-shell__row--clickable ${
-                              selectedIds.has(transaction.id) ? "import-shell__row--selected" : ""
-                            }`
-                          : undefined
+                        [
+                          bulkMode
+                            ? `import-shell__row--clickable ${
+                                selectedIds.has(transaction.id)
+                                  ? "import-shell__row--selected"
+                                  : ""
+                              }`
+                            : "",
+                          onConfirmAutoCategorized && transaction.autoCategorized
+                            ? "import-shell__row--review"
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ") || undefined
                       }
                       onClick={
                         bulkMode
                           ? (event) => {
                               // Let the row's own controls (the category select, the checkbox) handle
                               // their clicks; a click anywhere else toggles the row's selection.
-                              if ((event.target as HTMLElement).closest("input, select, button, a")) {
+                              if (
+                                (event.target as HTMLElement).closest(
+                                  "input, select, button, a",
+                                )
+                              ) {
                                 return;
                               }
                               toggleRowSelected(transaction.id);
@@ -387,9 +522,15 @@ function TransactionList({
                       <td>{transaction.description}</td>
                       <td>
                         {(() => {
-                          const bankLogo = bankLogoByName[normalizeBankName(transaction.sourceBank)];
+                          const bankLogo =
+                            bankLogoByName[
+                              normalizeBankName(transaction.sourceBank)
+                            ];
                           return bankLogo ? (
-                            <div className="import-shell__bank-badge" title={transaction.sourceBank}>
+                            <div
+                              className="import-shell__bank-badge"
+                              title={transaction.sourceBank}
+                            >
                               <img
                                 src={bankLogo}
                                 alt={`${transaction.sourceBank} logo`}
@@ -397,7 +538,9 @@ function TransactionList({
                               />
                             </div>
                           ) : (
-                            <span className="import-shell__bank-name">{transaction.sourceBank}</span>
+                            <span className="import-shell__bank-name">
+                              {transaction.sourceBank}
+                            </span>
                           );
                         })()}
                       </td>
@@ -429,14 +572,23 @@ function TransactionList({
                             onChange={(event) => {
                               const nextCategory = event.target.value;
                               if (nextCategory !== transaction.category) {
-                                onCategoryChange(transaction.id, nextCategory as Category);
+                                onCategoryChange(
+                                  transaction.id,
+                                  nextCategory as Category,
+                                );
                               }
                             }}
                           >
                             {categoryOptionsByBucket.map((group) => (
-                              <optgroup key={group.bucketLabel} label={group.bucketLabel}>
+                              <optgroup
+                                key={group.bucketLabel}
+                                label={group.bucketLabel}
+                              >
                                 {group.options.map((option) => (
-                                  <option key={option.value} value={option.value}>
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  >
                                     {option.label}
                                   </option>
                                 ))}
@@ -446,10 +598,24 @@ function TransactionList({
                           {/* Hidden copy of just the selected label sizes the pill to its text; the
                               select overlays it. Without this an appearance:none select widens to fit
                               its widest option instead of the chosen one. */}
-                          <span className="import-shell__category-pill-mirror" aria-hidden="true">
+                          <span
+                            className="import-shell__category-pill-mirror"
+                            aria-hidden="true"
+                          >
                             {selectedCategoryLabel}
                           </span>
                         </span>
+                        {onConfirmAutoCategorized && transaction.autoCategorized && (
+                          <button
+                            type="button"
+                            className="import-shell__review-confirm"
+                            title="Auto-categorized — click to confirm this category"
+                            aria-label={`Confirm category for ${transaction.description}`}
+                            onClick={() => onConfirmAutoCategorized([transaction.id])}
+                          >
+                            ✓
+                          </button>
+                        )}
                       </td>
                       <td className="import-shell__cell--amount">
                         {currencyFormatter.format(transaction.amount)}
@@ -461,7 +627,9 @@ function TransactionList({
               <tfoot>
                 <tr className="import-shell__table-total-row">
                   <td colSpan={footerColSpan}>Total</td>
-                  <td className="import-shell__cell--amount">{currencyFormatter.format(visibleTotal)}</td>
+                  <td className="import-shell__cell--amount">
+                    {currencyFormatter.format(visibleTotal)}
+                  </td>
                 </tr>
               </tfoot>
             </table>

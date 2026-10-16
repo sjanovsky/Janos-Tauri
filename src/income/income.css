@@ -150,30 +150,6 @@
   overflow-y: auto;
 }
 
-.pgrid__bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
-
-.pgrid__add {
-  display: flex;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.pgrid__add input {
-  min-width: 0;
-  width: 15rem;
-}
-
-.pgrid__add--inline input {
-  flex: 1;
-  width: auto;
-}
-
 .pgrid__empty,
 .pgrid__muted {
   color: #94a3b8;
@@ -290,7 +266,6 @@
   margin-top: 0.35rem;
 }
 
-
 .pgrid__versions button {
   padding: 0.2rem 0.55rem;
   font-size: 0.85rem;
@@ -397,45 +372,6 @@
   cursor: pointer;
 }
 
-.pgrid__danger {
-  padding: 0.15rem 0.5rem;
-  border: 0;
-  background: transparent;
-  color: #dc2626;
-  font-size: 0.78rem;
-  box-shadow: none;
-  cursor: pointer;
-}
-
-.pgrid__danger:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
-.pgrid__danger:disabled {
-  color: #cbd5e1;
-  cursor: not-allowed;
-}
-
-.pgrid__link {
-  padding: 0.15rem 0.5rem;
-  border: 0;
-  background: transparent;
-  color: #94a3b8;
-  font-size: 0.75rem;
-  box-shadow: none;
-  cursor: pointer;
-}
-
-.pgrid__link:hover {
-  color: #475569;
-  text-decoration: underline;
-}
-
-.pgrid__confirm {
-  font-size: 0.75rem;
-  color: #64748b;
-}
-
 .pgrid__offlist {
   padding: 0.9rem 1rem;
   border: 1px solid #fde68a;
@@ -467,45 +403,6 @@
 }
 
 /* Edit mode: grip, name and delete share a row. */
-.pgrid__editrow {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.pgrid__editrow input:not([type="color"]) {
-  flex: 1;
-  min-width: 0;
-  padding: 0.25rem 0.45rem;
-}
-
-.pgrid__grip {
-  cursor: grab;
-  color: #94a3b8;
-  user-select: none;
-}
-
-.pgrid__delete {
-  border: 0;
-  background: transparent;
-  color: #94a3b8;
-  box-shadow: none;
-  cursor: pointer;
-}
-
-.pgrid__delete:hover {
-  color: #dc2626;
-}
-
-.pgrid__drop {
-  outline: 2px dashed #4f46e5;
-  outline-offset: -2px;
-}
-
-.pgrid__drop-before th,
-.pgrid__drop-before td {
-  box-shadow: inset 0 2px 0 #4f46e5;
-}
 
 /* --- Paychecks grid: appified dates, version picker, pinned footer --- */
 .pgrid {
@@ -518,10 +415,6 @@
   overflow: auto;
 }
 
-
-
-
-
 /* The footer (net, deposits, delete) stays at the bottom while the line items scroll. */
 .pgrid__pin > th,
 .pgrid__pin > td {
@@ -533,12 +426,6 @@
 
 .pgrid__pin > th.pgrid__label {
   z-index: 4;
-}
-
-.pgrid__pin--actions > th,
-.pgrid__pin--actions > td {
-  bottom: 0;
-  height: 2.1rem;
 }
 
 .pgrid__pin--deposits > th,
@@ -600,21 +487,6 @@
   cursor: default;
 }
 
-.pgrid__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  font-size: 0.74rem;
-  color: #64748b;
-}
-
-.pgrid__link:disabled {
-  color: #cbd5e1;
-  cursor: not-allowed;
-  text-decoration: none;
-}
-
 /* --- Paychecks grid: read-only by default, Edit in the corner --- */
 .pgrid__corner {
   vertical-align: bottom;
@@ -660,15 +532,6 @@
 }
 
 /* Without the delete row, the pinned footer is just net and deposits. */
-.pgrid__table:not(.pgrid__table--editing) .pgrid__pin--deposits > th,
-.pgrid__table:not(.pgrid__table--editing) .pgrid__pin--deposits > td {
-  bottom: 0;
-}
-
-.pgrid__table:not(.pgrid__table--editing) .pgrid__pin--net > th,
-.pgrid__table:not(.pgrid__table--editing) .pgrid__pin--net > td {
-  bottom: 3rem;
-}
 
 .pgrid__offlist {
   position: relative;
@@ -776,4 +639,313 @@
   background: #ffffff;
   font-size: 0.74rem;
   font-weight: 600;
+}
+
+/* --- Paychecks grid: corner tools, version delete, pinned footer without a delete row --- */
+.pgrid__tools {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.pgrid .pgrid__tool {
+  padding: 0.28rem 0.8rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 0.78rem;
+  font-weight: 600;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.pgrid .pgrid__tool:hover {
+  border-color: #a5b4fc;
+  background: #f5f7ff;
+}
+
+.pgrid__newpaycheck {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.pgrid__newpaycheck input {
+  width: 8rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
+}
+
+.pgrid__newpaycheck button {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+.pgrid__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.pgrid__title .pgrid__more {
+  margin-left: auto;
+  padding: 0 0.4rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  font-size: 1.2rem;
+  line-height: 1.4;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.pgrid__title .pgrid__more:hover {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.pgrid__version-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pgrid__version-wrap .pgrid__version {
+  flex: 1;
+}
+
+.pgrid .pgrid__version-x {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.pgrid .pgrid__version-x:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.pgrid .pgrid__version-x:disabled {
+  color: #e2e8f0;
+  cursor: not-allowed;
+}
+
+/* The footer is just net and deposits, so deposits sit on the bottom edge. */
+.pgrid__pin--deposits > th,
+.pgrid__pin--deposits > td {
+  bottom: 0;
+}
+
+.pgrid__pin--net > th,
+.pgrid__pin--net > td {
+  bottom: 3rem;
+}
+
+/* --- Paycheck settings --- */
+.pset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: min(26rem, 80vw);
+}
+
+.pset h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.pset__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.pset__field small {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.pset__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pset__row input:not([type="color"]) {
+  flex: 1;
+}
+
+.pset__row input[type="color"] {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.pset__danger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.pset .pset__delete-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #dc2626;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.pset .pset__delete {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #ffffff;
+}
+
+/* --- Paychecks toolbar and version menu --- */
+.pgrid__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  /* Matches the height of the transaction list's search row, so the two line up. */
+  min-height: 2.9rem;
+  flex-shrink: 0;
+}
+
+.pgrid__toolbar .income-check {
+  margin: 0 0 0 auto;
+}
+
+.pgrid__corner {
+  padding: 0;
+}
+
+.pgrid__versions {
+  position: relative;
+}
+
+.pgrid__versionbar {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.pgrid .pgrid__version--select {
+  flex: 1;
+  cursor: pointer;
+}
+
+.pgrid__version--select i {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-style: normal;
+}
+
+.pgrid__menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.pgrid__menu {
+  position: absolute;
+  top: 2.2rem;
+  left: 0;
+  right: 0;
+  z-index: 21;
+  margin: 0;
+  padding: 0.3rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(17, 24, 39, 0.16);
+  list-style: none;
+}
+
+.pgrid__menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.55rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  color: #374151;
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pgrid__menu button:hover {
+  background: #f5f7ff;
+}
+
+.pgrid__menu .pgrid__menu-item--active {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.pgrid__menu em {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pgrid__daterow {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+}
+
+.pgrid__daterow input[type="date"] {
+  flex: 1;
+  min-width: 0;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.pgrid__versions .pgrid__version-add {
+  display: block;
+  width: 100%;
+  margin-top: 0.3rem;
 }

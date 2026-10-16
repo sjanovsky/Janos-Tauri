@@ -1,4 +1,4 @@
-import type { ImportedTransaction } from "../../spending/lib/csvParser";
+import type { ImportedTransaction } from "../../upload/lib/csvParser";
 import { normalizeBankName, type BankRecord } from "../../spending/lib/banks";
 import { parseDate } from "../../spending/lib/transactionSummary";
 

@@ -116,6 +116,51 @@ describe("buildFlow", () => {
     expect(values[LEFTOVER_ID]).toBe(4500);
   });
 
+  it("draws a bucket that nets below zero as money back into Net pay", () => {
+    const flow = buildFlow(
+      base(
+        [
+          deposit("d1", "1/15/2026"),
+          tx("r", "2/1/2026", -1500, "rent"),
+          tx("w", "2/2/2026", 171, "work"),
+        ],
+        {
+          spendingBuckets: [
+            { id: "fixed", name: "Fixed", color: "#111111", position: 0 },
+            { id: "workb", name: "Work", color: "#999999", position: 1 },
+          ],
+          spendingCategories: [
+            {
+              id: "rent",
+              label: "Rent",
+              color: "#111",
+              bucketId: "fixed",
+              excluded: false,
+              position: 0,
+            },
+            {
+              id: "work",
+              label: "Work",
+              color: "#999",
+              bucketId: "workb",
+              excluded: false,
+              position: 0,
+            },
+          ],
+        },
+      ),
+    );
+    expect(flow.spending).toBe(1329);
+    expect(flow.leftover).toBe(flow.net - 1329);
+    const into = flow.graph.links
+      .filter((link) => link.target === "net")
+      .reduce((sum, link) => sum + link.value, 0);
+    const out = flow.graph.links
+      .filter((link) => link.source === "net")
+      .reduce((sum, link) => sum + link.value, 0);
+    expect(into).toBeCloseTo(out, 2);
+  });
+
   it("limits to the month and ignores other income and transfers", () => {
     const flow = buildFlow(
       base(

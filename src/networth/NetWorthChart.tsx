@@ -39,7 +39,7 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => ({
   label: new Date(2000, index, 1).toLocaleString(undefined, { month: "short" }),
 }));
 
-type TooltipAnchor = { point: NetWorthPoint; x: number; y: number };
+type TooltipAnchor = { point: NetWorthPoint; x: number; y: number; bucketId: string | null };
 
 type NetWorthChartProps = {
   hasAccounts: boolean;
@@ -259,8 +259,11 @@ function NetWorthChart({
 
   // Anchor the shared tooltip over a hovered/focused bar. `topPct` is where the bar's top sits in
   // the plot, so the tooltip floats just above whichever bar the pointer is on (not the column).
-  const showTooltip = (point: NetWorthPoint, rect: DOMRect, topPct: number) => {
-    setTooltipAnchor({ point, x: rect.left + rect.width / 2, y: rect.top + (topPct / 100) * rect.height });
+  const showTooltip = (point: NetWorthPoint, rect: DOMRect, topPct: number, bucketId: string | null) => {
+    const next = { point, x: rect.left + rect.width / 2, y: rect.top + (topPct / 100) * rect.height, bucketId };
+    setTooltipAnchor((current) =>
+      current && current.point.month === point.month && current.bucketId === bucketId ? current : next,
+    );
   };
   const hideTooltip = (point: NetWorthPoint) => {
     setTooltipAnchor((current) => (current?.point.month === point.month ? null : current));
@@ -538,22 +541,28 @@ function NetWorthChart({
             }}
           >
             <div className="import-shell__tooltip-title">{tooltipAnchor.point.label}</div>
-            {tooltipAnchor.point.segments.map((segment) => (
-              <div key={segment.bucketId} className="import-shell__tooltip-row">
-                <span className="import-shell__tooltip-key" style={{ background: segment.color }} />
-                <strong>{currencyFormatter.format(segment.value)}</strong>
-                <span>{segment.label}</span>
-              </div>
-            ))}
-            <div className="import-shell__tooltip-row import-shell__tooltip-row--net">
-              <span className="import-shell__tooltip-key" style={{ background: "transparent" }} />
-              <strong>
-                {currencyFormatter.format(
-                  tooltipAnchor.point.segments.reduce((sum, segment) => sum + segment.value, 0),
-                )}
-              </strong>
-              <span>Net worth</span>
-            </div>
+            {(() => {
+              const hovered = tooltipAnchor.point.segments.find((s) => s.bucketId === tooltipAnchor.bucketId);
+              if (hovered) {
+                return (
+                  <div className="import-shell__tooltip-row">
+                    <span className="import-shell__tooltip-key" style={{ background: hovered.color }} />
+                    <strong>{currencyFormatter.format(hovered.value)}</strong>
+                    <span>{hovered.label}</span>
+                  </div>
+                );
+              }
+              return (
+                <div className="import-shell__tooltip-row">
+                  <strong>
+                    {currencyFormatter.format(
+                      tooltipAnchor.point.segments.reduce((sum, segment) => sum + segment.value, 0),
+                    )}
+                  </strong>
+                  <span>Net worth</span>
+                </div>
+              );
+            })()}
           </div>,
           document.body,
         )}
@@ -569,7 +578,7 @@ type BarColumnProps = {
   showTotal: boolean;
   // Years view: draw this bar dimmed (it has no value column beneath it).
   muted?: boolean;
-  onShow: (point: NetWorthPoint, rect: DOMRect, topPct: number) => void;
+  onShow: (point: NetWorthPoint, rect: DOMRect, topPct: number, bucketId: string | null) => void;
   onHide: (point: NetWorthPoint) => void;
 };
 
@@ -615,9 +624,14 @@ function BarColumn({ point, baselinePct, scale, showTotal, muted = false, onShow
       className="import-shell__bar-col"
       tabIndex={0}
       aria-label={`${point.label}: ${currencyFormatter.format(netTotal)}`}
-      onMouseEnter={(event) => onShow(point, event.currentTarget.getBoundingClientRect(), tooltipTopPct)}
+      onMouseMove={(event) => {
+        const id =
+          (event.target as HTMLElement).closest?.("[data-bucket-id]")?.getAttribute("data-bucket-id") ?? null;
+        const hovered = id ? allRects.find((r) => r.segment.bucketId === id) : undefined;
+        onShow(point, event.currentTarget.getBoundingClientRect(), hovered ? hovered.topPct : tooltipTopPct, id);
+      }}
       onMouseLeave={() => onHide(point)}
-      onFocus={(event) => onShow(point, event.currentTarget.getBoundingClientRect(), tooltipTopPct)}
+      onFocus={(event) => onShow(point, event.currentTarget.getBoundingClientRect(), tooltipTopPct, null)}
       onBlur={() => onHide(point)}
     >
       {showTotal && allRects.length > 0 && (
@@ -628,6 +642,7 @@ function BarColumn({ point, baselinePct, scale, showTotal, muted = false, onShow
       {allRects.map(({ segment, topPct, heightPct, borderRadius }) => (
         <div
           key={segment.bucketId}
+          data-bucket-id={segment.bucketId}
           className="import-shell__bar-segment"
           style={{
             top: `calc(${topPct}% + 1px)`,

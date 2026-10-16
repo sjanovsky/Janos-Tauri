@@ -1,88 +1,20 @@
-import { useState, type ComponentProps, type ReactNode } from "react";
+import type { ComponentProps } from "react";
 import Modal from "./Modal";
-import BankReportUpload from "./BankReportUpload";
-import BankSettings from "./BankSettings";
 import BucketsAndCategories from "./BucketsAndCategories";
 
-// Which panel the manage modal shows. Each of the Spending-page toolbar buttons opens the modal
-// straight to its own tab.
-export type ManageTab = "upload" | "banks" | "buckets";
-
 type ManageModalProps = {
-  initialTab: ManageTab;
   onClose: () => void;
-  upload: ComponentProps<typeof BankReportUpload>;
-  bank: ComponentProps<typeof BankSettings>;
   buckets: ComponentProps<typeof BucketsAndCategories>;
 };
 
-function UploadIcon() {
+// The Spending-page settings modal: organize buckets & categories. Importing bank reports and
+// managing banks live on the Upload page.
+function ManageModal({ onClose, buckets }: ManageModalProps) {
   return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
-  );
-}
-
-function BankIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M3 10h18" />
-      <path d="M7 15h2" />
-      <path d="M15 15h2" />
-    </svg>
-  );
-}
-
-function BucketsIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 6h16l-1.5 13a1 1 0 0 1-1 .9H6.5a1 1 0 0 1-1-.9z" />
-      <path d="M3.5 6l1-2.4a1 1 0 0 1 .92-.6h13.16a1 1 0 0 1 .92.6l1 2.4" />
-      <path d="M9 11v4" />
-      <path d="M15 11v4" />
-    </svg>
-  );
-}
-
-const TABS: { id: ManageTab; label: string; icon: ReactNode }[] = [
-  { id: "upload", label: "Upload", icon: <UploadIcon /> },
-  { id: "banks", label: "Banks", icon: <BankIcon /> },
-  { id: "buckets", label: "Buckets & Categories", icon: <BucketsIcon /> },
-];
-
-// One modal for all three Spending-page management tasks — importing bank reports, managing bank
-// logos, and organizing buckets & categories — behind a tab strip mirroring the app's top-bar tabs.
-function ManageModal({ initialTab, onClose, upload, bank, buckets }: ManageModalProps) {
-  const [activeTab, setActiveTab] = useState<ManageTab>(initialTab);
-  const activeLabel = TABS.find((tab) => tab.id === activeTab)?.label ?? "Manage";
-
-  return (
-    <Modal label={activeLabel} onClose={onClose}>
+    <Modal label="Buckets & Categories" onClose={onClose}>
       <div className="manage-modal">
-        <nav className="manage-modal__tabs" role="tablist" aria-label="Manage">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              className={`manage-modal__tab ${activeTab === tab.id ? "manage-modal__tab--active" : ""}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <span className="manage-modal__tab-icon">{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-
         <div className="manage-modal__body">
-          {activeTab === "upload" && <BankReportUpload {...upload} />}
-          {activeTab === "banks" && <BankSettings {...bank} />}
-          {activeTab === "buckets" && <BucketsAndCategories {...buckets} />}
+          <BucketsAndCategories {...buckets} />
         </div>
       </div>
     </Modal>

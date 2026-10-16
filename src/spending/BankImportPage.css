@@ -3001,3 +3001,277 @@ textarea.bucket-row__name {
   stroke: var(--chart-baseline);
   stroke-width: 1;
 }
+
+/* Upload page: left-pane bank list (name, logo, data range) with expandable per-file rows. */
+.bank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each bank is one card: the header row on top and, when expanded, its uploads beneath a
+   divider, so the table reads as part of the row rather than a separate block. */
+.bank-list__item {
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: white;
+}
+
+.bank-list__item:hover {
+  border-color: #c7d2fe;
+}
+
+.bank-list__item--selected,
+.bank-list__item--selected:hover {
+  border-color: #818cf8;
+}
+
+.bank-list__item--selected .bank-list__row {
+  background: #eef2ff;
+}
+
+.bank-list__row {
+  display: flex;
+  align-items: stretch;
+  background: #f9fafb;
+}
+
+.bank-list__expand {
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.bank-list__expand:hover {
+  color: #111827;
+}
+
+.bank-list__select {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.6rem 0.75rem 0.6rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bank-list__logo {
+  flex: none;
+  box-sizing: border-box;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  object-fit: contain;
+}
+
+.bank-list__logo--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e2e8f0;
+  color: #374151;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.bank-list__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.bank-list__name {
+  overflow: hidden;
+  color: #111827;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-list__range {
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+.bank-list__count {
+  color: #6b7280;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.bank-list__uploads {
+  background: white;
+}
+
+.bank-list__uploads-empty {
+  margin: 0;
+  padding: 0.6rem 1rem;
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.bank-list__table th,
+.bank-list__table td {
+  white-space: nowrap;
+}
+
+.bank-list__table .uploads-table__name-input {
+  min-width: 8rem;
+}
+
+/* Spacing between the import panel and the bank list above it. */
+.import-shell__chart-card > .custom-import {
+  margin-bottom: 1.25rem;
+}
+
+/* App.css gives every input/button a drop shadow; the bank list's inline controls sit inside
+   bordered rows and a table, so they stay flat. */
+.bank-list__expand,
+.bank-list__select,
+.bank-list__table .uploads-table__name-input,
+.bank-list__table .import-shell__upload-delete {
+  box-shadow: none;
+}
+
+.bank-list__uploads .import-shell__table-shell {
+  flex: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.bank-list__table {
+  font-size: 0.85rem;
+}
+
+/* Column header: gray to match the bank row above, with the values below left white. */
+.bank-list__table th,
+.bank-list__table thead tr {
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.bank-list__table.uploads-table th {
+  padding: 0.5rem 0.75rem;
+}
+
+.bank-list__table td {
+  padding: 0.35rem 0.75rem;
+}
+
+.bank-list__upload-row {
+  cursor: pointer;
+}
+
+.bank-list__table tbody tr:hover {
+  background: #f3f4f6;
+}
+
+.bank-list__table tbody tr.bank-list__upload-row--selected,
+.bank-list__table tbody tr.bank-list__upload-row--selected:hover {
+  background: #eef2ff;
+}
+
+.bank-list__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Auto-categorized transactions awaiting review (Upload page). */
+.import-shell__review-banner {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 0.85rem;
+}
+
+.import-shell__review-banner > span {
+  flex: 1;
+}
+
+.import-shell__review-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.import-shell__review-banner button {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  background: white;
+  box-shadow: none;
+  color: #78350f;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.import-shell__table tbody tr.import-shell__row--review td {
+  background: #fffbeb;
+}
+
+.import-shell__table tbody tr.import-shell__row--review td:first-child {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.import-shell__review-confirm {
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  background: white;
+  box-shadow: none;
+  color: #b45309;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.import-shell__review-confirm:hover {
+  background: #fef3c7;
+}
+
+/* Setup tabs (Paychecks, Upload) sit at the right edge, apart from the reporting tabs. */
+.import-shell__tabs--setup {
+  margin-left: auto;
+}
+
+/* The import checkboxes (headers, expense sign) share one row above the mapping or the preview button. */
+.custom-import__options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+}
+
+.custom-import__intake-actions .custom-import__options {
+  flex: 1;
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildChartSeries } from "./transactionSummary";
-import type { ImportedTransaction } from "./csvParser";
+import type { ImportedTransaction } from "../../upload/lib/csvParser";
 
 function makeTransaction(overrides: Partial<ImportedTransaction>): ImportedTransaction {
   return {

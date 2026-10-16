@@ -1,13 +1,47 @@
 import { useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import type { ImportedTransaction } from "./lib/csvParser";
-import type { KnownCategory } from "./lib/categories";
-import type { BankRecord } from "./lib/banks";
-import { buildTransactionsFromMapping, guessColumnIndex, parseDelimitedText, type ParsedTable } from "./lib/genericParser";
+import type { KnownCategory } from "../spending/lib/categories";
+import { normalizeBankName, type BankRecord } from "../spending/lib/banks";
+import {
+  buildTransactionsFromMapping,
+  guessColumnIndex,
+  parseAmount,
+  parseDelimitedText,
+  type ParsedTable,
+} from "./lib/genericParser";
 import BankSelect from "./BankSelect";
 
 const PREVIEW_ROW_LIMIT = 10;
 
+const signStorageKey = (bankName: string) => `janos.expensesNegative.${normalizeBankName(bankName)}`;
+
+function readRememberedSign(bankName: string): boolean {
+  try {
+    return localStorage.getItem(signStorageKey(bankName)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberSign(bankName: string, expensesNegative: boolean) {
+  try {
+    localStorage.setItem(signStorageKey(bankName), expensesNegative ? "1" : "0");
+  } catch {
+    // Remembering is a convenience; ignore storage being unavailable.
+  }
+}
+
+// What the preview shows for a cell in the amount column once the sign choice is applied.
+function previewAmount(cell: string, flip: boolean): string {
+  if (!flip) {
+    return cell;
+  }
+  const value = parseAmount(cell);
+  return Number.isNaN(value) ? cell : (0 - value).toFixed(2);
+}
+
 type CustomImportPanelProps = {
+  // Amounts arrive already normalized: spending is positive, whatever sign the file used.
   onImport: (bankName: string, fileName: string, transactions: ImportedTransaction[]) => Promise<boolean>;
   knownCategories: KnownCategory[];
   bankRecords: BankRecord[];
@@ -40,15 +74,21 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
   const [isDropActive, setIsDropActive] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [hasHeaders, setHasHeaders] = useState(true);
+  // The text the preview was parsed from, kept so the headers checkbox can re-parse it.
+  const [rawText, setRawText] = useState("");
+  const [expensesNegative, setExpensesNegative] = useState(false);
+  // Once the user touches the checkbox, picking a bank no longer overwrites it.
+  const [expensesTouched, setExpensesTouched] = useState(false);
 
-  const applyParsedTable = (table: ParsedTable, fileName: string) => {
+  const applyParsedTable = (table: ParsedTable, fileName: string, text: string): boolean => {
     if (table.headers.length === 0 || table.rows.length === 0) {
       setError("Couldn't find any rows. Make sure the first line has column headers.");
-      return;
+      return false;
     }
 
     setParsed(table);
     setSourceFileName(fileName);
+    setRawText(text);
     setMapping({
       dateIndex: guessColumnIndex(table.headers, ["date"]),
       amountIndex: guessColumnIndex(table.headers, ["amount", "amt", "value"]),
@@ -57,6 +97,7 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
     });
     setError(null);
     setSuccessMessage(null);
+    return true;
   };
 
   const readFile = async (file: File | null) => {
@@ -65,7 +106,7 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
     }
 
     const text = await file.text();
-    applyParsedTable(parseDelimitedText(text, hasHeaders), file.name);
+    applyParsedTable(parseDelimitedText(text, hasHeaders), file.name, text);
   };
 
   const handleBrowseChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -85,7 +126,7 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
       return;
     }
 
-    applyParsedTable(parseDelimitedText(pasteText, hasHeaders), "Pasted data");
+    applyParsedTable(parseDelimitedText(pasteText, hasHeaders), "Pasted data", pasteText);
   };
 
   const resetAll = () => {
@@ -94,8 +135,58 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
     setPasteText("");
     setMapping(EMPTY_MAPPING);
     setBankName("");
+    setRawText("");
+    setExpensesNegative(false);
+    setExpensesTouched(false);
     setError(null);
   };
+
+  // Toggling headers on the preview re-reads the same source text, so the columns (and the
+  // guessed mapping) update in place without re-dropping the file.
+  const handleHeadersChange = (checked: boolean) => {
+    if (!parsed) {
+      setHasHeaders(checked);
+      return;
+    }
+    if (applyParsedTable(parseDelimitedText(rawText, checked), sourceFileName, rawText)) {
+      setHasHeaders(checked);
+    }
+  };
+
+  const handleExpensesNegativeChange = (checked: boolean) => {
+    setExpensesNegative(checked);
+    setExpensesTouched(true);
+  };
+
+  // Picking a bank starts the sign checkbox from what was used for that bank's last import,
+  // unless the user has already chosen one for this file.
+  const handleBankChange = (name: string) => {
+    setBankName(name);
+    if (!expensesTouched) {
+      setExpensesNegative(readRememberedSign(name));
+    }
+  };
+
+  const importOptions = (
+    <div className="custom-import__options">
+      <label className="custom-import__headers-toggle">
+        <input
+          type="checkbox"
+          checked={hasHeaders}
+          onChange={(event) => handleHeadersChange(event.target.checked)}
+        />
+        First row is headers
+      </label>
+      <label className="custom-import__headers-toggle">
+        <input
+          type="checkbox"
+          checked={expensesNegative}
+          onChange={(event) => handleExpensesNegativeChange(event.target.checked)}
+        />
+        Expenses are shown as negatives
+      </label>
+    </div>
+  );
 
   const handleMappingChange = (field: MappingField, value: string) => {
     setMapping((current) => ({ ...current, [field]: value === "" ? null : Number.parseInt(value, 10) }));
@@ -116,7 +207,7 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
       return;
     }
 
-    const transactions = buildTransactionsFromMapping(
+    const built = buildTransactionsFromMapping(
       parsed,
       {
         dateIndex: mapping.dateIndex,
@@ -129,15 +220,21 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
       knownCategories,
     );
 
-    if (transactions.length === 0) {
+    if (built.length === 0) {
       setError("No rows had a valid amount in the selected column.");
       return;
     }
+
+    // The app stores spending as positive; a file that lists expenses as negatives is flipped.
+    const transactions = expensesNegative
+      ? built.map((transaction) => ({ ...transaction, amount: 0 - transaction.amount }))
+      : built;
 
     setIsImporting(true);
     try {
       const succeeded = await onImport(bankName.trim(), sourceFileName, transactions);
       if (succeeded) {
+        rememberSign(bankName, expensesNegative);
         setSuccessMessage(`Imported ${transactions.length} transaction${transactions.length === 1 ? "" : "s"}.`);
         resetAll();
       }
@@ -184,14 +281,7 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
           </div>
 
           <div className="custom-import__intake-actions">
-            <label className="custom-import__headers-toggle">
-              <input
-                type="checkbox"
-                checked={hasHeaders}
-                onChange={(event) => setHasHeaders(event.target.checked)}
-              />
-              First row is headers
-            </label>
+            {importOptions}
             <button type="button" className="custom-import__button" onClick={handlePreviewPaste}>
               Preview data
             </button>
@@ -212,7 +302,11 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
                 {parsed.rows.slice(0, PREVIEW_ROW_LIMIT).map((row, rowIndex) => (
                   <tr key={rowIndex}>
                     {parsed.headers.map((_, columnIndex) => (
-                      <td key={columnIndex}>{row[columnIndex] ?? ""}</td>
+                      <td key={columnIndex}>
+                        {columnIndex === mapping.amountIndex
+                          ? previewAmount(row[columnIndex] ?? "", expensesNegative)
+                          : (row[columnIndex] ?? "")}
+                      </td>
                     ))}
                   </tr>
                 ))}
@@ -224,6 +318,8 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
               </p>
             )}
           </div>
+
+          {importOptions}
 
           <div className="custom-import__fields">
             <label className="custom-import__field">
@@ -285,7 +381,7 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
 
             <div className="custom-import__field">
               Bank
-              <BankSelect banks={bankRecords} value={bankName} onChange={setBankName} />
+              <BankSelect banks={bankRecords} value={bankName} onChange={handleBankChange} />
             </div>
 
             <div className="custom-import__actions">

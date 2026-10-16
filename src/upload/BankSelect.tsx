@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { BankRecord } from "./lib/banks";
+import type { BankRecord } from "../spending/lib/banks";
 
 type BankSelectProps = {
   banks: BankRecord[];

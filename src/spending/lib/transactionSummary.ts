@@ -1,4 +1,4 @@
-import type { ImportedTransaction } from "./csvParser";
+import type { ImportedTransaction } from "../../upload/lib/csvParser";
 import { isTransferCategory } from "./categories";
 
 export type ChartRange = "day" | "month" | "year";

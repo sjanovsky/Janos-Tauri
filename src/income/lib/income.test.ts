@@ -11,7 +11,7 @@ import {
   toIncomeTransactions,
   type PaycheckRecord,
 } from "./income";
-import type { ImportedTransaction } from "../../spending/lib/csvParser";
+import type { ImportedTransaction } from "../../upload/lib/csvParser";
 
 const tx = (id: string, amount: number, sourceBank: string, category: string): ImportedTransaction => ({
   id,

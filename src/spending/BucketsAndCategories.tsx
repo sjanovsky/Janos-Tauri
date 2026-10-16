@@ -36,7 +36,7 @@ const NEW_CATEGORY_DEFAULT_COLOR = "#4f46e5";
 const CATEGORY_DRAG_TYPE = "application/x-janos-category";
 const BUCKET_DRAG_TYPE = "application/x-janos-bucket";
 
-function TrashIcon() {
+export function TrashIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -57,7 +57,7 @@ function TrashIcon() {
   );
 }
 
-function PlusIcon() {
+export function PlusIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -76,7 +76,7 @@ function PlusIcon() {
   );
 }
 
-function CloseIcon() {
+export function CloseIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -95,7 +95,7 @@ function CloseIcon() {
   );
 }
 
-function GripIcon() {
+export function GripIcon() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
       <circle cx="9" cy="5" r="1.6" />

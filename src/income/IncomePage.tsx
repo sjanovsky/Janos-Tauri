@@ -10,8 +10,8 @@ import TransactionList, {
   type SortKey,
   type SortState,
 } from "../spending/TransactionList";
-import type { UploadedFileView } from "../spending/BankReportUpload";
-import type { ImportedTransaction } from "../spending/lib/csvParser";
+import type { UploadedFileView } from "../upload/lib/uploads";
+import type { ImportedTransaction } from "../upload/lib/csvParser";
 import type { BankRecord } from "../spending/lib/banks";
 import { computeDivergingScale } from "../spending/lib/chartScale";
 import {
@@ -1181,7 +1181,7 @@ function IncomePage({ view = "income" }: IncomePageProps) {
     <>
       {dbError && <div className="import-shell__db-error">{dbError}</div>}
 
-      {depositCheck.status === "ok" && (
+      {tab === "monthly" && depositCheck.status === "ok" && (
         <p
           className="income-check income-check--ok"
           role="status"
@@ -1227,6 +1227,7 @@ function IncomePage({ view = "income" }: IncomePageProps) {
               buckets={paycheckBuckets}
               items={paycheckItems}
               deposits={transactions}
+              check={depositCheck}
               selectedPaycheckId={activePaycheckId}
               onSelectPaycheck={setSelectedPaycheckId}
               onAddPaycheck={handleAddPaycheck}
@@ -1256,6 +1257,7 @@ function IncomePage({ view = "income" }: IncomePageProps) {
             selectedBucketId={tab === "paychecks" ? null : selectedBucketId}
             selectedBucketLabel={selectedBucketLabel}
             selectedBucketName={selectedBucketName}
+            filterBelowTools={tab === "paychecks"}
             onClearFilter={clearTableFilter}
             sort={tableSort}
             onToggleSort={toggleSort}

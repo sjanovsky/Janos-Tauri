@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import NumberField from "../taxes/NumberField";
-import { BUCKET_COLOR_PALETTE } from "../spending/lib/categories";
-import type { ImportedTransaction } from "../spending/lib/csvParser";
+import type { ImportedTransaction } from "../upload/lib/csvParser";
+import LineItemsManager from "./LineItemsManager";
+import PaycheckSettingsModal from "./PaycheckSettingsModal";
 import {
   UNGROUPED_ITEMS_BUCKET_ID,
   currentVersion,
@@ -12,6 +13,7 @@ import {
   paycheckSubtotal,
   resolveVersion,
   toIsoDate,
+  type DepositCheck,
   type PaycheckBucketRecord,
   type PaycheckItemRecord,
   type PaycheckRecord,
@@ -58,34 +60,15 @@ type PaychecksTabProps = {
     item: Pick<PaycheckItemRecord, "id" | "label" | "bucketId">,
   ) => void;
   onDeleteItem: (id: string) => void;
-  // Drag and drop: move an item into a bucket (null = ungrouped) before another item (null = end),
-  // or move a bucket before another bucket (null = end).
   onMoveItem: (
     itemId: string,
     bucketId: string | null,
     beforeItemId: string | null,
   ) => void;
   onMoveBucket: (bucketId: string, beforeBucketId: string | null) => void;
+  // Whether paycheck deposits tie to the paychecks' numbers, shown beside the tools.
+  check?: DepositCheck;
 };
-
-type Drag = { kind: "item" | "bucket"; id: string };
-
-// A grip that drags the whole row it sits in (inputs inside can't start a drag themselves).
-function gripProps(drag: Drag, setDrag: (drag: Drag | null) => void) {
-  return {
-    draggable: true,
-    onDragStart: (event: React.DragEvent<HTMLElement>) => {
-      const row = event.currentTarget.closest("tr");
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", drag.id);
-      if (row) {
-        event.dataTransfer.setDragImage(row, 0, 0);
-      }
-      setDrag(drag);
-    },
-    onDragEnd: () => setDrag(null),
-  };
-}
 
 const money = (value: number) =>
   value.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -102,10 +85,13 @@ const prettyDate = (iso: string) => {
 };
 
 // The paychecks as one grid: a column per paycheck, a row per line item (grouped by bucket), with
-// gross at the top and net at the bottom. Each paycheck is versioned: the picker in its header
-// shows how it looked from any date, and a new version carries the numbers forward. A one-off
-// version adjusts a single deposit (a commission check) without touching the paycheck's numbers.
-// "Edit line items" turns the rows into editors; the line items are shared by every paycheck.
+// gross at the top and net and deposits pinned at the bottom. Each paycheck is versioned: its
+// version buttons show how it looked over any date range, and a new version carries the numbers
+// forward. A one-off version adjusts a single deposit (a commission check) without touching the
+// paycheck's numbers.
+//
+// The grid is read-only. "Edit" unlocks only the numbers and dates; the structure lives elsewhere:
+// "Line items" manages the shared buckets and items, and a paycheck's ⋯ opens its settings.
 function PaychecksTab({
   paychecks,
   buckets,
@@ -126,15 +112,13 @@ function PaychecksTab({
   onDeleteItem,
   onMoveItem,
   onMoveBucket,
+  check,
 }: PaychecksTabProps) {
+  const [editing, setEditing] = useState(false);
+  const [managingItems, setManagingItems] = useState(false);
+  const [settingsFor, setSettingsFor] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
-  const [editingItems, setEditingItems] = useState(false);
-  const [newBucket, setNewBucket] = useState("");
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const [newItemByBucket, setNewItemByBucket] = useState<
-    Record<string, string>
-  >({});
   // Which version each paycheck's column is showing; unset means its current one.
   const [viewing, setViewing] = useState<Record<string, string>>({});
   // The paycheck whose "new version" date picker is open, and its date.
@@ -143,13 +127,14 @@ function PaychecksTab({
     date: string;
   } | null>(null);
   const [offFor, setOffFor] = useState<string | null>(null);
-  // The paycheck waiting on a second click before it (and all its versions) is deleted.
-  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  // The paycheck whose version menu is open.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
 
   const orderedBuckets = [...buckets].sort((a, b) => a.position - b.position);
   const orderedItems = [...items].sort((a, b) => a.position - b.position);
   const ungrouped = orderedItems.filter(
-    (item) => !item.bucketId || !buckets.some((b) => b.id === item.bucketId),
+    (item) =>
+      !item.bucketId || !buckets.some((bucket) => bucket.id === item.bucketId),
   );
   const sections = [
     ...orderedBuckets.map((bucket) => ({
@@ -157,16 +142,14 @@ function PaychecksTab({
       name: bucket.name,
       color: bucket.color,
       items: orderedItems.filter((item) => item.bucketId === bucket.id),
-      bucket,
     })),
-    ...(ungrouped.length > 0 || editingItems
+    ...(ungrouped.length > 0
       ? [
           {
             id: UNGROUPED_ITEMS_BUCKET_ID,
             name: "Ungrouped",
             color: "#94a3b8",
             items: ungrouped,
-            bucket: null,
           },
         ]
       : []),
@@ -175,8 +158,8 @@ function PaychecksTab({
     deposits.map((deposit) => [deposit.id, deposit] as const),
   );
 
-  // Everything a column needs: the version on show, whether it can be edited, and how its
-  // deposits line up with the numbers in effect on their dates.
+  // Everything a column needs: the version on show, and how its deposits line up with the numbers
+  // in effect on their dates.
   const columns = paychecks.map((paycheck) => {
     const current = currentVersion(paycheck);
     const shown =
@@ -202,10 +185,7 @@ function PaychecksTab({
     return { paycheck, current, shown, count: mine.length, off };
   });
 
-  const versionLabel = (
-    _paycheck: PaycheckRecord,
-    version: PaycheckVersionRecord,
-  ) => {
+  const versionLabel = (version: PaycheckVersionRecord) => {
     if (version.transactionId) {
       const deposit = depositsById.get(version.transactionId);
       return `One-off · ${deposit?.date ?? "deposit"}`;
@@ -217,11 +197,19 @@ function PaychecksTab({
     return `${from} – ${to}`;
   };
 
+  const showVersion = (paycheckId: string, versionId: string | null) =>
+    setViewing((current) => {
+      const { [paycheckId]: _removed, ...rest } = current;
+      return versionId ? { ...rest, [paycheckId]: versionId } : rest;
+    });
+
   const addPaycheck = () => {
     const name = newName.trim();
     if (name) {
       onAddPaycheck(name);
       setNewName("");
+      setAdding(false);
+      setEditing(true);
     }
   };
 
@@ -229,8 +217,10 @@ function PaychecksTab({
     if (!versioning || !versioning.date) {
       return;
     }
-    const id = onAddVersion(paycheckId, versioning.date, copyFrom);
-    setViewing((current) => ({ ...current, [paycheckId]: id }));
+    showVersion(
+      paycheckId,
+      onAddVersion(paycheckId, versioning.date, copyFrom),
+    );
     setVersioning(null);
   };
 
@@ -246,73 +236,109 @@ function PaychecksTab({
       existing?.id ??
       (from ? onAddVersion(paycheck.id, "", from.id, deposit.id) : null);
     if (id) {
-      setViewing((current) => ({ ...current, [paycheck.id]: id }));
+      showVersion(paycheck.id, id);
+      setEditing(true);
     }
   };
 
   const colCount = columns.length + 1;
   const empty = paychecks.length === 0;
+  const settingsPaycheck =
+    paychecks.find((paycheck) => paycheck.id === settingsFor) ?? null;
 
-  const cellsFor = (
-    render: (column: (typeof columns)[number]) => ReactNode,
-    className = "",
-  ) =>
+  const cellsFor = (render: (column: (typeof columns)[number]) => ReactNode) =>
     columns.map((column) => (
-      <td key={column.paycheck.id} className={`pgrid__cell ${className}`}>
+      <td key={column.paycheck.id} className="pgrid__cell">
         {column.shown ? render(column) : null}
       </td>
     ));
 
+  // The controls above the grid, with the paycheck check at the right.
+  const toolbar = (
+    <div className="pgrid__toolbar">
+      <button
+        type="button"
+        className={`pgrid__edit ${editing ? "pgrid__edit--on" : ""}`}
+        aria-pressed={editing}
+        title="Edit amounts and dates"
+        onClick={() => setEditing((current) => !current)}
+      >
+        {editing ? "Done" : "Edit"}
+      </button>
+      <button
+        type="button"
+        className="pgrid__tool"
+        onClick={() => setManagingItems(true)}
+      >
+        Line items
+      </button>
+      {adding ? (
+        <form
+          className="pgrid__newpaycheck"
+          onSubmit={(event) => {
+            event.preventDefault();
+            addPaycheck();
+          }}
+        >
+          <input
+            autoFocus
+            placeholder="Paycheck name"
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setAdding(false);
+              }
+            }}
+          />
+          <button type="submit" disabled={!newName.trim()}>
+            Add
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          className="pgrid__tool"
+          onClick={() => setAdding(true)}
+        >
+          ＋ Paycheck
+        </button>
+      )}
+      {check?.status === "ok" && (
+        <span
+          className="income-check income-check--ok"
+          role="status"
+          title={`Every deposit matches its paycheck's net (${money(check.deposited)} deposited).`}
+        >
+          ✓ Paychecks tie to the bank
+        </span>
+      )}
+      {check?.status === "mismatch" && (
+        <span className="income-check income-check--mismatch" role="status">
+          {check.mismatched} of {check.count} deposit
+          {check.count === 1 ? "" : "s"} don't match
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="pgrid">
-      {(editingItems || empty) && (
-        <div className="pgrid__bar">
-          <form
-            className="pgrid__add"
-            onSubmit={(event) => {
-              event.preventDefault();
-              addPaycheck();
-            }}
-          >
-            <input
-              placeholder="New paycheck, e.g. Rachel Salary"
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-            />
-            <button type="submit" disabled={!newName.trim()}>
-              Add paycheck
-            </button>
-          </form>
-          {empty && !editingItems && (
-            <button type="button" onClick={() => setEditingItems(true)}>
-              Edit
-            </button>
-          )}
-        </div>
-      )}
-
+      {toolbar}
       {empty ? (
         <div className="pgrid__empty">
-          Add a paycheck to enter its gross pay and what comes out of it. Every
-          deposit that matches a paycheck's deposit name is filed under it.
+          <p>
+            Add a paycheck to enter its gross pay and what comes out of it.
+            Every deposit that matches a paycheck's deposit name is filed under
+            it.
+          </p>
         </div>
       ) : (
         <div className="pgrid__scroll">
-          <table
-            className={`pgrid__table ${editingItems ? "pgrid__table--editing" : ""}`}
-          >
+          <table className="pgrid__table">
             <thead>
               <tr>
-                <th className="pgrid__label pgrid__corner">
-                  <button
-                    type="button"
-                    className={`pgrid__edit ${editingItems ? "pgrid__edit--on" : ""}`}
-                    aria-pressed={editingItems}
-                    onClick={() => setEditingItems((current) => !current)}
-                  >
-                    {editingItems ? "Done" : "Edit"}
-                  </button>
-                </th>
+                <th className="pgrid__label pgrid__corner" />
                 {columns.map(({ paycheck, shown, current }) => (
                   <th
                     key={paycheck.id}
@@ -320,10 +346,10 @@ function PaychecksTab({
                     style={{ borderTopColor: paycheck.color }}
                     title="Click to show this paycheck's deposits"
                     onClick={(event) => {
-                      // Clicks on the header's own fields edit them; anywhere else picks the paycheck.
+                      // Buttons and fields in the header do their own thing; anywhere else picks it.
                       if (
                         (event.target as HTMLElement).closest(
-                          "input, select, button, label",
+                          "input, button, label",
                         )
                       ) {
                         return;
@@ -334,141 +360,184 @@ function PaychecksTab({
                     }}
                   >
                     <div className="pgrid__title">
-                      {editingItems ? (
-                        <>
-                          <input
-                            type="color"
-                            aria-label={`${paycheck.name} color`}
-                            value={paycheck.color}
-                            onChange={(event) =>
-                              onUpdatePaycheck(paycheck.id, {
-                                color: event.target.value,
-                              })
-                            }
-                          />
-                          <input
-                            key={paycheck.name}
-                            aria-label="Paycheck name"
-                            defaultValue={paycheck.name}
-                            onBlur={(event) => {
-                              const name = event.target.value.trim();
-                              if (name && name !== paycheck.name) {
-                                onUpdatePaycheck(paycheck.id, { name });
-                              } else {
-                                event.target.value = paycheck.name;
-                              }
-                            }}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <span
-                            className="pgrid__swatch"
-                            style={{ background: paycheck.color }}
-                          />
-                          <strong className="pgrid__name">
-                            {paycheck.name}
-                          </strong>
-                        </>
-                      )}
-                    </div>
-                    {editingItems ? (
-                      <input
-                        className="pgrid__pattern"
-                        aria-label="Deposit name contains"
-                        placeholder="Deposit name contains…"
-                        defaultValue={paycheck.depositPattern}
-                        onBlur={(event) => {
-                          const depositPattern = event.target.value.trim();
-                          if (depositPattern !== paycheck.depositPattern) {
-                            onUpdatePaycheck(paycheck.id, { depositPattern });
-                          }
-                        }}
+                      <span
+                        className="pgrid__swatch"
+                        style={{ background: paycheck.color }}
                       />
-                    ) : (
-                      <div className="pgrid__pattern pgrid__pattern--static">
-                        {paycheck.depositPattern || "No deposit name"}
-                      </div>
-                    )}
-                    <div
-                      className="pgrid__versions"
-                      role="group"
-                      aria-label={`${paycheck.name} versions`}
-                    >
-                      {[
-                        ...[...datedVersions(paycheck)].reverse(),
-                        ...paycheck.versions.filter(
-                          (version) => version.transactionId !== null,
-                        ),
-                      ].map((version) =>
-                        shown?.id === version.id &&
-                        editingItems &&
-                        !version.transactionId ? (
-                          <div
-                            key={version.id}
-                            className="pgrid__version pgrid__version--active pgrid__version--editing"
-                          >
-                            <input
-                              type="date"
-                              aria-label="From"
-                              title="First day these numbers apply. Leave empty for from the start."
-                              value={version.effectiveFrom}
-                              onChange={(event) =>
-                                onUpdateVersion(version.id, {
-                                  effectiveFrom: event.target.value,
-                                })
-                              }
-                            />
-                            <span aria-hidden="true">–</span>
-                            <input
-                              type="date"
-                              aria-label="Until"
-                              title="Last day these numbers apply. Leave empty while they're still current."
-                              value={version.effectiveTo}
-                              onChange={(event) =>
-                                onUpdateVersion(version.id, {
-                                  effectiveTo: event.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                        ) : (
-                          <button
-                            key={version.id}
-                            type="button"
-                            aria-pressed={shown?.id === version.id}
-                            className={`pgrid__version ${shown?.id === version.id ? "pgrid__version--active" : ""}`}
-                            onClick={() =>
-                              setViewing((all) => ({
-                                ...all,
-                                [paycheck.id]: version.id,
-                              }))
-                            }
-                          >
-                            <span>{versionLabel(paycheck, version)}</span>
-                            {version.id === current?.id && <em>Current</em>}
-                          </button>
-                        ),
-                      )}
-                      {editingItems && (
+                      <strong className="pgrid__name">{paycheck.name}</strong>
+                      {editing && (
                         <button
                           type="button"
-                          className="pgrid__version-add"
-                          title="New version from a date"
-                          aria-label={`New version of ${paycheck.name}`}
-                          onClick={() =>
-                            setVersioning(
-                              versioning?.paycheckId === paycheck.id
-                                ? null
-                                : { paycheckId: paycheck.id, date: todayIso() },
-                            )
-                          }
+                          className="pgrid__more"
+                          aria-label={`${paycheck.name} settings`}
+                          title="Name, color, deposit name, delete"
+                          onClick={() => setSettingsFor(paycheck.id)}
                         >
-                          ＋ New version
+                          ⋯
                         </button>
                       )}
                     </div>
-                    {editingItems &&
+                    <div className="pgrid__pattern pgrid__pattern--static">
+                      {paycheck.depositPattern || "No deposit name"}
+                    </div>
+
+                    <div className="pgrid__versions">
+                      {(() => {
+                        const options = [
+                          ...[...datedVersions(paycheck)].reverse(),
+                          ...paycheck.versions.filter(
+                            (version) => version.transactionId !== null,
+                          ),
+                        ];
+                        const open = menuFor === paycheck.id;
+                        const lastDated =
+                          shown &&
+                          !shown.transactionId &&
+                          datedVersions(paycheck).length <= 1;
+                        return (
+                          <>
+                            <div className="pgrid__versionbar">
+                              <button
+                                type="button"
+                                className={`pgrid__version pgrid__version--active pgrid__version--select ${open ? "pgrid__version--open" : ""}`}
+                                aria-haspopup="listbox"
+                                aria-expanded={open}
+                                title={
+                                  options.length > 1
+                                    ? "Switch version"
+                                    : undefined
+                                }
+                                onClick={() =>
+                                  setMenuFor(open ? null : paycheck.id)
+                                }
+                              >
+                                <span>
+                                  {shown ? versionLabel(shown) : "No version"}
+                                </span>
+                                {shown?.id === current?.id && <em>Current</em>}
+                                {options.length > 1 && (
+                                  <i aria-hidden="true">▾</i>
+                                )}
+                              </button>
+                              {editing && shown && (
+                                <button
+                                  type="button"
+                                  className="pgrid__version-x"
+                                  aria-label={
+                                    shown.transactionId
+                                      ? "Remove this one-off"
+                                      : "Delete this version"
+                                  }
+                                  title={
+                                    lastDated
+                                      ? "A paycheck needs at least one version"
+                                      : shown.transactionId
+                                        ? "Remove this one-off"
+                                        : "Delete this version"
+                                  }
+                                  disabled={!!lastDated}
+                                  onClick={() => {
+                                    onDeleteVersion(shown.id);
+                                    showVersion(paycheck.id, null);
+                                  }}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+
+                            {open && (
+                              <>
+                                <div
+                                  className="pgrid__menu-backdrop"
+                                  onClick={() => setMenuFor(null)}
+                                />
+                                <ul
+                                  className="pgrid__menu"
+                                  role="listbox"
+                                  aria-label={`${paycheck.name} versions`}
+                                >
+                                  {options.map((version) => (
+                                    <li
+                                      key={version.id}
+                                      role="option"
+                                      aria-selected={shown?.id === version.id}
+                                    >
+                                      <button
+                                        type="button"
+                                        className={
+                                          shown?.id === version.id
+                                            ? "pgrid__menu-item--active"
+                                            : ""
+                                        }
+                                        onClick={() => {
+                                          showVersion(paycheck.id, version.id);
+                                          setMenuFor(null);
+                                        }}
+                                      >
+                                        <span>{versionLabel(version)}</span>
+                                        {version.id === current?.id && (
+                                          <em>Current</em>
+                                        )}
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </>
+                            )}
+
+                            {editing && shown && !shown.transactionId && (
+                              <div className="pgrid__daterow">
+                                <input
+                                  type="date"
+                                  aria-label="From"
+                                  title="First day these numbers apply. Leave empty for from the start."
+                                  value={shown.effectiveFrom}
+                                  onChange={(event) =>
+                                    onUpdateVersion(shown.id, {
+                                      effectiveFrom: event.target.value,
+                                    })
+                                  }
+                                />
+                                <span aria-hidden="true">–</span>
+                                <input
+                                  type="date"
+                                  aria-label="Until"
+                                  title="Last day these numbers apply. Leave empty while they're still current."
+                                  value={shown.effectiveTo}
+                                  onChange={(event) =>
+                                    onUpdateVersion(shown.id, {
+                                      effectiveTo: event.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
+                            )}
+                            {editing && (
+                              <button
+                                type="button"
+                                className="pgrid__version-add"
+                                title="New version from a date"
+                                aria-label={`New version of ${paycheck.name}`}
+                                onClick={() =>
+                                  setVersioning(
+                                    versioning?.paycheckId === paycheck.id
+                                      ? null
+                                      : {
+                                          paycheckId: paycheck.id,
+                                          date: todayIso(),
+                                        },
+                                  )
+                                }
+                              >
+                                ＋ New version
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                    {editing &&
                       versioning?.paycheckId === paycheck.id &&
                       shown && (
                         <div className="pgrid__newversion">
@@ -518,7 +587,7 @@ function PaychecksTab({
                   Gross income
                 </th>
                 {cellsFor(({ shown }) =>
-                  editingItems ? (
+                  editing ? (
                     <NumberField
                       ariaLabel="Gross income"
                       value={shown.gross}
@@ -541,25 +610,8 @@ function PaychecksTab({
                   section={section}
                   columns={columns}
                   colCount={colCount}
-                  editingItems={editingItems}
-                  drag={drag}
-                  setDrag={setDrag}
-                  dropTarget={dropTarget}
-                  setDropTarget={setDropTarget}
-                  newItem={newItemByBucket[section.id] ?? ""}
-                  setNewItem={(value) =>
-                    setNewItemByBucket((current) => ({
-                      ...current,
-                      [section.id]: value,
-                    }))
-                  }
+                  editing={editing}
                   onSetValue={onSetValue}
-                  onSaveBucket={onSaveBucket}
-                  onDeleteBucket={onDeleteBucket}
-                  onSaveItem={onSaveItem}
-                  onDeleteItem={onDeleteItem}
-                  onMoveItem={onMoveItem}
-                  onMoveBucket={onMoveBucket}
                 />
               ))}
 
@@ -620,77 +672,6 @@ function PaychecksTab({
                   );
                 })}
               </tr>
-              {editingItems && (
-                <tr className="pgrid__pin pgrid__pin--actions">
-                  <td />
-                  {columns.map(({ paycheck, shown }) => {
-                    // The only dated version can't go: a paycheck always has numbers to fall back on.
-                    const lastDated =
-                      shown.transactionId === null &&
-                      datedVersions(paycheck).length <= 1;
-                    const confirming = confirmingDelete === paycheck.id;
-                    return (
-                      <td key={paycheck.id} className="pgrid__cell">
-                        <div className="pgrid__actions">
-                          {confirming ? (
-                            <>
-                              <span>Delete {paycheck.name}?</span>
-                              <button
-                                type="button"
-                                className="pgrid__danger"
-                                onClick={() => {
-                                  setConfirmingDelete(null);
-                                  onDeletePaycheck(paycheck.id);
-                                }}
-                              >
-                                Delete
-                              </button>
-                              <button
-                                type="button"
-                                className="pgrid__link"
-                                onClick={() => setConfirmingDelete(null)}
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                className="pgrid__link"
-                                disabled={lastDated}
-                                title={
-                                  lastDated
-                                    ? "This is the paycheck's only version. Add another first, or delete the whole paycheck."
-                                    : undefined
-                                }
-                                onClick={() => {
-                                  onDeleteVersion(shown.id);
-                                  setViewing(
-                                    ({ [paycheck.id]: _removed, ...rest }) =>
-                                      rest,
-                                  );
-                                }}
-                              >
-                                {shown.transactionId
-                                  ? "Remove one-off"
-                                  : "Delete version"}
-                              </button>
-                              <button
-                                type="button"
-                                className="pgrid__link"
-                                onClick={() => setConfirmingDelete(paycheck.id)}
-                              >
-                                Delete paycheck…
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
@@ -740,10 +721,9 @@ function PaychecksTab({
                       <td>
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditingItems(true);
-                            adjustDeposit(column.paycheck, deposit, version);
-                          }}
+                          onClick={() =>
+                            adjustDeposit(column.paycheck, deposit, version)
+                          }
                         >
                           {version?.transactionId
                             ? "Edit one-off"
@@ -758,34 +738,30 @@ function PaychecksTab({
           );
         })()}
 
-      {editingItems && (
-        <form
-          className="pgrid__add"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const name = newBucket.trim();
-            if (name) {
-              onSaveBucket({
-                id: crypto.randomUUID(),
-                name,
-                color:
-                  BUCKET_COLOR_PALETTE[
-                    buckets.length % BUCKET_COLOR_PALETTE.length
-                  ],
-              });
-              setNewBucket("");
-            }
+      {managingItems && (
+        <LineItemsManager
+          buckets={buckets}
+          items={items}
+          onClose={() => setManagingItems(false)}
+          onSaveBucket={onSaveBucket}
+          onDeleteBucket={onDeleteBucket}
+          onSaveItem={onSaveItem}
+          onDeleteItem={onDeleteItem}
+          onMoveItem={onMoveItem}
+          onMoveBucket={onMoveBucket}
+        />
+      )}
+
+      {settingsPaycheck && (
+        <PaycheckSettingsModal
+          paycheck={settingsPaycheck}
+          onClose={() => setSettingsFor(null)}
+          onUpdate={(patch) => onUpdatePaycheck(settingsPaycheck.id, patch)}
+          onDelete={() => {
+            setSettingsFor(null);
+            onDeletePaycheck(settingsPaycheck.id);
           }}
-        >
-          <input
-            placeholder="New bucket"
-            value={newBucket}
-            onChange={(event) => setNewBucket(event.target.value)}
-          />
-          <button type="submit" disabled={!newBucket.trim()}>
-            Add bucket
-          </button>
-        </form>
+        />
       )}
     </div>
   );
@@ -802,24 +778,11 @@ type SectionProps = {
     name: string;
     color: string;
     items: PaycheckItemRecord[];
-    bucket: PaycheckBucketRecord | null;
   };
   columns: Column[];
   colCount: number;
-  editingItems: boolean;
-  drag: Drag | null;
-  setDrag: (drag: Drag | null) => void;
-  dropTarget: string | null;
-  setDropTarget: (target: string | null) => void;
-  newItem: string;
-  setNewItem: (value: string) => void;
+  editing: boolean;
   onSetValue: PaychecksTabProps["onSetValue"];
-  onSaveBucket: PaychecksTabProps["onSaveBucket"];
-  onDeleteBucket: PaychecksTabProps["onDeleteBucket"];
-  onSaveItem: PaychecksTabProps["onSaveItem"];
-  onDeleteItem: PaychecksTabProps["onDeleteItem"];
-  onMoveItem: PaychecksTabProps["onMoveItem"];
-  onMoveBucket: PaychecksTabProps["onMoveBucket"];
 };
 
 // One bucket: a header row, a row per line item with a cell per paycheck, and a subtotal.
@@ -827,175 +790,25 @@ function SectionRows({
   section,
   columns,
   colCount,
-  editingItems,
-  drag,
-  setDrag,
-  dropTarget,
-  setDropTarget,
-  newItem,
-  setNewItem,
+  editing,
   onSetValue,
-  onSaveBucket,
-  onDeleteBucket,
-  onSaveItem,
-  onDeleteItem,
-  onMoveItem,
-  onMoveBucket,
 }: SectionProps) {
-  const bucketId = section.bucket?.id ?? null;
-  const headerTarget = `bucket:${section.id}`;
-
   return (
     <>
-      <tr
-        className={`pgrid__bucket ${dropTarget === headerTarget ? "pgrid__drop" : ""}`}
-        style={{ borderTopColor: section.color }}
-        onDragOver={
-          editingItems && drag
-            ? (event) => {
-                event.preventDefault();
-                setDropTarget(headerTarget);
-              }
-            : undefined
-        }
-        onDrop={
-          editingItems && drag
-            ? (event) => {
-                event.preventDefault();
-                if (drag.kind === "item") {
-                  onMoveItem(drag.id, bucketId, null);
-                } else {
-                  onMoveBucket(drag.id, bucketId);
-                }
-                setDrag(null);
-                setDropTarget(null);
-              }
-            : undefined
-        }
-      >
+      <tr className="pgrid__bucket" style={{ borderTopColor: section.color }}>
         <th colSpan={colCount} scope="colgroup">
-          {editingItems && section.bucket ? (
-            <div className="pgrid__editrow">
-              <input
-                type="color"
-                aria-label={`${section.name} color`}
-                value={section.color}
-                onChange={(event) =>
-                  onSaveBucket({
-                    id: section.bucket!.id,
-                    name: section.name,
-                    color: event.target.value,
-                  })
-                }
-              />
-              <span
-                className="pgrid__grip"
-                title="Drag to reorder"
-                {...gripProps(
-                  { kind: "bucket", id: section.bucket.id },
-                  setDrag,
-                )}
-              >
-                ⋮⋮
-              </span>
-              <input
-                aria-label="Bucket name"
-                defaultValue={section.name}
-                onBlur={(event) => {
-                  const name = event.target.value.trim();
-                  if (name && name !== section.name) {
-                    onSaveBucket({
-                      id: section.bucket!.id,
-                      name,
-                      color: section.color,
-                    });
-                  } else {
-                    event.target.value = section.name;
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="pgrid__delete"
-                aria-label={`Delete ${section.name}`}
-                onClick={() => onDeleteBucket(section.bucket!.id)}
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <span className="pgrid__bucket-name">{section.name}</span>
-          )}
+          <span className="pgrid__bucket-name">{section.name}</span>
         </th>
       </tr>
 
       {section.items.map((item) => (
-        <tr
-          key={item.id}
-          className={
-            dropTarget === `item:${item.id}` ? "pgrid__drop-before" : ""
-          }
-          onDragOver={
-            editingItems && drag?.kind === "item"
-              ? (event) => {
-                  event.preventDefault();
-                  setDropTarget(`item:${item.id}`);
-                }
-              : undefined
-          }
-          onDrop={
-            editingItems && drag?.kind === "item"
-              ? (event) => {
-                  event.preventDefault();
-                  onMoveItem(drag.id, bucketId, item.id);
-                  setDrag(null);
-                  setDropTarget(null);
-                }
-              : undefined
-          }
-        >
+        <tr key={item.id}>
           <th className="pgrid__label" scope="row">
-            {editingItems ? (
-              <div className="pgrid__editrow">
-                <span
-                  className="pgrid__grip"
-                  title="Drag to move"
-                  {...gripProps({ kind: "item", id: item.id }, setDrag)}
-                >
-                  ⋮⋮
-                </span>
-                <input
-                  aria-label="Line item name"
-                  defaultValue={item.label}
-                  onBlur={(event) => {
-                    const label = event.target.value.trim();
-                    if (label && label !== item.label) {
-                      onSaveItem({
-                        id: item.id,
-                        label,
-                        bucketId: item.bucketId,
-                      });
-                    } else {
-                      event.target.value = item.label;
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="pgrid__delete"
-                  aria-label={`Delete ${item.label}`}
-                  onClick={() => onDeleteItem(item.id)}
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              item.label
-            )}
+            {item.label}
           </th>
           {columns.map(({ paycheck, shown }) => (
             <td key={paycheck.id} className="pgrid__cell">
-              {editingItems ? (
+              {editing ? (
                 <NumberField
                   ariaLabel={`${item.label} amount for ${paycheck.name}`}
                   value={paycheckItemAmount(shown, item.id)}
@@ -1022,37 +835,6 @@ function SectionRows({
         <tr>
           <td colSpan={colCount} className="pgrid__muted pgrid__none">
             No line items
-          </td>
-        </tr>
-      )}
-
-      {editingItems && section.bucket && (
-        <tr>
-          <td colSpan={colCount}>
-            <form
-              className="pgrid__add pgrid__add--inline"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const label = newItem.trim();
-                if (label) {
-                  onSaveItem({
-                    id: crypto.randomUUID(),
-                    label,
-                    bucketId: section.bucket!.id,
-                  });
-                  setNewItem("");
-                }
-              }}
-            >
-              <input
-                placeholder="New line item"
-                value={newItem}
-                onChange={(event) => setNewItem(event.target.value)}
-              />
-              <button type="submit" disabled={!newItem.trim()}>
-                Add
-              </button>
-            </form>
           </td>
         </tr>
       )}

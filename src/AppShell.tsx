@@ -4,18 +4,24 @@ import IncomePage from "./income/IncomePage";
 import NetWorthPage from "./networth/NetWorthPage";
 import TaxesPage from "./taxes/TaxesPage";
 import SankeyPage from "./sankey/SankeyPage";
+import UploadPage from "./upload/UploadPage";
 import "./spending/BankImportPage.css";
 
 type View =
-  "income" | "paychecks" | "spending" | "networth" | "taxes" | "sankey";
+  "income" | "paychecks" | "spending" | "networth" | "taxes" | "sankey" | "upload";
 
 const TABS: { id: View; label: string }[] = [
   { id: "sankey", label: "Overview" },
   { id: "income", label: "Income" },
-  { id: "paychecks", label: "Paychecks" },
   { id: "spending", label: "Spending" },
   { id: "taxes", label: "Taxes" },
   { id: "networth", label: "Net Worth" },
+];
+
+// Setup pages sit apart from the reporting tabs, right-aligned in the top bar.
+const SETUP_TABS: { id: View; label: string }[] = [
+  { id: "paychecks", label: "Paychecks" },
+  { id: "upload", label: "Upload" },
 ];
 
 // App-level shell: the Janos top bar with one tab per page. The Overview (income, paychecks, taxes
@@ -39,6 +45,17 @@ function AppShell() {
             </button>
           ))}
         </nav>
+        <nav className="import-shell__tabs import-shell__tabs--setup">
+          {SETUP_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              className={`shell-tab ${view === tab.id ? "shell-tab--active" : ""}`}
+              onClick={() => setView(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
       </header>
 
       <main className="import-shell__content">
@@ -48,6 +65,7 @@ function AppShell() {
         {view === "networth" && <NetWorthPage />}
         {view === "taxes" && <TaxesPage />}
         {view === "sankey" && <SankeyPage />}
+        {view === "upload" && <UploadPage />}
       </main>
     </div>
   );

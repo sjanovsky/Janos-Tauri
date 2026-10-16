@@ -132,6 +132,33 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    // Migrate databases created before imports could auto-categorize from earlier transactions.
+    // The flag marks a category the app chose (not the user) so it can be highlighted for review
+    // until the user confirms or changes it.
+    let has_auto_categorized: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('transactions') WHERE name = 'auto_categorized'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_auto_categorized == 0 {
+        conn.execute(
+            "ALTER TABLE transactions ADD COLUMN auto_categorized INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
+
+    // Amounts are now always stored with spending positive (the import flips files that list
+    // expenses as negatives), so the per-bank sign setting is retired. Banks that were set to
+    // "negative spending" get their existing amounts flipped to match, then the setting is reset;
+    // once reset this is a no-op, so it only ever runs once per bank.
+    conn.execute(
+        "UPDATE transactions SET amount = -amount
+         WHERE lower(trim(source_bank)) IN (
+             SELECT lower(trim(name)) FROM banks WHERE spending_positive = 0)",
+        [],
+    )?;
+    conn.execute("UPDATE banks SET spending_positive = 1 WHERE spending_positive = 0", [])?;
+
     // Migrate databases created before categories could be ordered within a bucket. Existing
     // rows default to position 0, so they keep their prior (label) order until the user drags
     // to reorder a bucket.
@@ -189,4 +216,38 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     )?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flips_negative_spending_banks_once() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        migrate(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO banks (id, name, spending_positive) VALUES ('b1', 'Checking', 0), ('b2', 'Card', 1);
+             INSERT INTO uploads (id, bank_name, file_name) VALUES ('u', 'x', 'f');
+             INSERT INTO transactions (id, upload_id, date, description, card_member, account_number,
+                                       amount, source_bank, source_file_name, category) VALUES
+               ('t1', 'u', '1/1/2026', 'a', '', '', -40, ' checking ', 'f', 'unclassified'),
+               ('t2', 'u', '1/1/2026', 'b', '', '', 12, 'Card', 'f', 'unclassified');",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+        migrate(&conn).unwrap(); // idempotent: the second run must not flip again
+
+        let amount = |id: &str| -> f64 {
+            conn.query_row("SELECT amount FROM transactions WHERE id = ?1", [id], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(amount("t1"), 40.0);
+        assert_eq!(amount("t2"), 12.0);
+        let flag: i64 = conn
+            .query_row("SELECT spending_positive FROM banks WHERE id = 'b1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(flag, 1);
+    }
 }

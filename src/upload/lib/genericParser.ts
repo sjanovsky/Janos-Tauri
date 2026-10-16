@@ -1,6 +1,6 @@
 import { splitDelimitedLine } from "./csvParser";
 import type { ImportedTransaction } from "./csvParser";
-import { resolveCategoryInput, type KnownCategory } from "./categories";
+import { resolveCategoryInput, type KnownCategory } from "../../spending/lib/categories";
 
 export type ParsedTable = {
   headers: string[];
@@ -49,7 +49,7 @@ export function guessColumnIndex(headers: string[], keywords: string[]): number 
   return index === -1 ? null : index;
 }
 
-function parseAmount(raw: string): number {
+export function parseAmount(raw: string): number {
   const trimmed = raw.trim().replace(/[$,]/g, "");
   const isParenNegative = trimmed.startsWith("(") && trimmed.endsWith(")");
   const unwrapped = isParenNegative ? trimmed.slice(1, -1) : trimmed;

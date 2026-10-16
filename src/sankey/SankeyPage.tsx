@@ -12,6 +12,8 @@ import type {
 import type { BankRecord } from "../spending/lib/banks";
 import type { PaychecksData } from "../income/lib/income";
 import { buildFlow, type FlowSourceTransaction } from "./lib/flow";
+import ManageModal from "../spending/ManageModal";
+import { useBucketsAndCategories } from "../spending/lib/useBucketsAndCategories";
 import {
   defaultPeriod,
   monthName,
@@ -56,6 +58,7 @@ function SankeyPage() {
   const [loaded, setLoaded] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const [period, setPeriod] = useState<PeriodSelection>(() => defaultPeriod());
+  const [showSettings, setShowSettings] = useState(false);
   const [drill, setDrill] = useState<DrillContent | null>(null);
   // Bucket nodes opened into their line items or categories.
   const [expanded, setExpanded] = useState<Set<string>>(
@@ -110,6 +113,26 @@ function SankeyPage() {
       expanded,
     ],
   );
+
+  // The same bucket & category editor as the Spending page; edits flow straight into the diagram.
+  const bucketsAndCategoriesProps = useBucketsAndCategories({
+    buckets: spendingBuckets,
+    setBuckets: setSpendingBuckets,
+    categoryRecords: spendingCategories,
+    setCategoryRecords: setSpendingCategories,
+    onError: setDbError,
+    onCategoryRemoved: (id) => {
+      const previous = transactions;
+      setTransactions((current) =>
+        current.map((transaction) =>
+          transaction.category === id
+            ? { ...transaction, category: "unclassified" }
+            : transaction,
+        ),
+      );
+      return () => setTransactions(previous);
+    },
+  });
 
   const update = (changes: Partial<PeriodSelection>) =>
     setPeriod((current) => ({ ...current, ...changes }));
@@ -266,6 +289,13 @@ function SankeyPage() {
                         </button>
                       ))}
                     </div>
+                    <button
+                      type="button"
+                      className="sankey-settings-btn"
+                      onClick={() => setShowSettings(true)}
+                    >
+                      Settings
+                    </button>
                   </div>
                 </div>
               </div>
@@ -288,6 +318,13 @@ function SankeyPage() {
           </div>
         )}
       </section>
+
+      {showSettings && (
+        <ManageModal
+          onClose={() => setShowSettings(false)}
+          buckets={bucketsAndCategoriesProps}
+        />
+      )}
 
       {drill && (
         <SankeyDrill

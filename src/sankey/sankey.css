@@ -407,3 +407,14 @@
   font-size: 1.05rem;
   font-variant-numeric: tabular-nums;
 }
+
+.sankey-page .sankey-settings-btn {
+  padding: 0.45rem 0.8rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -47,6 +47,8 @@ type TooltipAnchor = {
   point: BucketChartPoint;
   x: number;
   y: number;
+  /** The segment under the pointer, or null when hovering the column's empty space. */
+  bucketId: string | null;
 };
 
 // Each bucket's section renders its categories as line items, then the bucket total at the
@@ -328,12 +330,22 @@ function SpendingChart({
 
                           const isSelected = selectedBucketKey === point.key;
 
-                          const anchorTooltip = (rect: DOMRect) => {
-                            setTooltipAnchor({
+                          const anchorTooltip = (rect: DOMRect, target: EventTarget | null) => {
+                            const segmentEl = (target as HTMLElement | null)?.closest?.("[data-bucket-id]");
+                            const bucketId = segmentEl?.getAttribute("data-bucket-id") ?? null;
+                            const hovered = bucketId ? allRects.find((r) => r.segment.bucketId === bucketId) : undefined;
+                            const topPct = hovered ? hovered.topPct : tooltipTopPct;
+                            const next = {
                               point,
                               x: rect.left + rect.width / 2,
-                              y: rect.top + (tooltipTopPct / 100) * rect.height,
-                            });
+                              y: rect.top + (topPct / 100) * rect.height,
+                              bucketId,
+                            };
+                            setTooltipAnchor((current) =>
+                              current && current.point.label === point.label && current.bucketId === bucketId
+                                ? current
+                                : next,
+                            );
                           };
                           const clearTooltip = () => {
                             setTooltipAnchor((current) => (current?.point.label === point.label ? null : current));
@@ -355,9 +367,9 @@ function SpendingChart({
                                   onToggleBucket(point.key);
                                 }
                               }}
-                              onMouseEnter={(event) => anchorTooltip(event.currentTarget.getBoundingClientRect())}
+                              onMouseMove={(event) => anchorTooltip(event.currentTarget.getBoundingClientRect(), event.target)}
                               onMouseLeave={clearTooltip}
-                              onFocus={(event) => anchorTooltip(event.currentTarget.getBoundingClientRect())}
+                              onFocus={(event) => anchorTooltip(event.currentTarget.getBoundingClientRect(), null)}
                               onBlur={clearTooltip}
                             >
                               {allRects.length > 0 && (
@@ -376,6 +388,7 @@ function SpendingChart({
                                 return (
                                   <div
                                     key={segment.bucketId}
+                                    data-bucket-id={segment.bucketId}
                                     className={`import-shell__bar-segment ${segmentSelected ? "import-shell__bar-segment--selected" : ""} ${segmentDimmed ? "import-shell__bar-segment--dimmed" : ""}`}
                                     style={{
                                       top: `calc(${topPct}% + 1px)`,
@@ -518,13 +531,25 @@ function SpendingChart({
             }}
           >
             <div className="import-shell__tooltip-title">{tooltipAnchor.point.label}</div>
-            {tooltipAnchor.point.segments.map((segment) => (
-              <div key={segment.bucketId} className="import-shell__tooltip-row">
-                <span className="import-shell__tooltip-key" style={{ background: segment.color }} />
-                <strong>{currencyFormatter.format(segment.value)}</strong>
-                <span>{segment.label}</span>
-              </div>
-            ))}
+            {(() => {
+              const hovered = tooltipAnchor.point.segments.find((s) => s.bucketId === tooltipAnchor.bucketId);
+              if (hovered) {
+                return (
+                  <div className="import-shell__tooltip-row">
+                    <span className="import-shell__tooltip-key" style={{ background: hovered.color }} />
+                    <strong>{currencyFormatter.format(hovered.value)}</strong>
+                    <span>{hovered.label}</span>
+                  </div>
+                );
+              }
+              const total = tooltipAnchor.point.segments.reduce((sum, s) => sum + s.value, 0);
+              return (
+                <div className="import-shell__tooltip-row">
+                  <strong>{currencyFormatter.format(total)}</strong>
+                  <span>Total</span>
+                </div>
+              );
+            })()}
           </div>,
           document.body,
         )}

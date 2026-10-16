@@ -1,4 +1,4 @@
-import type { Category } from "./categories";
+import type { Category } from "../../spending/lib/categories";
 
 export type ImportedTransaction = {
   id: string;
@@ -10,6 +10,8 @@ export type ImportedTransaction = {
   sourceBank: string;
   sourceFileName: string;
   category: Category;
+  // Set by import auto-categorization until the user reviews (confirms or changes) the category.
+  autoCategorized?: boolean;
 };
 
 export function splitDelimitedLine(line: string, delimiter: string): string[] {

@@ -36,7 +36,7 @@ const MONTH_NAMES = [
 export const monthName = (month: number) => MONTH_NAMES[month] ?? "";
 
 export function defaultPeriod(today: Date = new Date()): PeriodSelection {
-  return { mode: "year", year: today.getFullYear(), month: today.getMonth(), from: "", to: "" };
+  return { mode: "month", year: today.getFullYear(), month: today.getMonth(), from: "", to: "" };
 }
 
 function parseInputDate(value: string): Date | null {

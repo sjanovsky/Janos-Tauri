@@ -12,6 +12,10 @@ pub struct TransactionRecord {
     pub source_bank: String,
     pub source_file_name: String,
     pub category: String,
+    /// True while the category was chosen by import auto-classification and hasn't been
+    /// reviewed (confirmed or changed) by the user.
+    #[serde(default)]
+    pub auto_categorized: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
