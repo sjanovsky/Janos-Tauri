@@ -11,7 +11,7 @@ import {
   normalizeBankName,
   type BankRecord,
 } from "./lib/banks";
-import { currencyFormatter } from "./lib/format";
+import { accountingCurrencyFormatter } from "./lib/format";
 import { parseDate } from "./lib/transactionSummary";
 import MultiSelectFilter from "./MultiSelectFilter";
 
@@ -87,6 +87,8 @@ type TransactionListProps = {
   onCategoryChange: (transactionId: string, category: Category) => void;
   // Apply one category to many transactions at once (bulk update).
   onBulkCategoryChange: (transactionIds: string[], category: Category) => void;
+  // Multiply the amount of many transactions by -1 at once (bulk update).
+  onBulkFlipSign: (transactionIds: string[]) => void;
   // When given, transactions flagged autoCategorized are highlighted and can be confirmed
   // (marked reviewed) one at a time or all at once.
   onConfirmAutoCategorized?: (transactionIds: string[]) => void;
@@ -114,6 +116,7 @@ function TransactionList({
   bankRecords,
   onCategoryChange,
   onBulkCategoryChange,
+  onBulkFlipSign,
   onConfirmAutoCategorized,
 }: TransactionListProps) {
   const [search, setSearch] = useState("");
@@ -285,6 +288,16 @@ function TransactionList({
     setBulkMode(false);
   };
 
+  const applyBulkFlipSign = () => {
+    if (selectedVisibleCount === 0) {
+      return;
+    }
+    onBulkFlipSign(selectedVisibleIds);
+    setSelectedIds(new Set());
+    setBulkCategory("");
+    setBulkMode(false);
+  };
+
   const footerColSpan = SORT_COLUMNS.length - 1 + (bulkMode ? 1 : 0);
 
   const filterChip =
@@ -370,30 +383,41 @@ function TransactionList({
             <span className="import-shell__bulk-count">
               {selectedVisibleCount} selected
             </span>
-            <select
-              className="import-shell__bulk-select"
-              value={bulkCategory}
-              onChange={(event) => setBulkCategory(event.target.value)}
-            >
-              <option value="">Change category to…</option>
-              {categoryOptionsByBucket.map((group) => (
-                <optgroup key={group.bucketLabel} label={group.bucketLabel}>
-                  {group.options.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <button
+            <div className="import-shell__bulk-group">
+              <select
+                className="import-shell__bulk-select"
+                value={bulkCategory}
+                onChange={(event) => setBulkCategory(event.target.value)}
+              >
+                <option value="">Change category to…</option>
+                {categoryOptionsByBucket.map((group) => (
+                  <optgroup key={group.bucketLabel} label={group.bucketLabel}>
+                    {group.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="import-shell__bulk-apply"
+                onClick={applyBulkCategory}
+                disabled={!bulkCategory || selectedVisibleCount === 0}
+              >
+                Apply
+              </button>
+              <button
               type="button"
-              className="import-shell__bulk-apply"
-              onClick={applyBulkCategory}
-              disabled={!bulkCategory || selectedVisibleCount === 0}
+              className="import-shell__bulk-secondary"
+              onClick={applyBulkFlipSign}
+              disabled={selectedVisibleCount === 0}
+              title="Multiply the amount of each selected transaction by -1"
             >
-              Apply
+              Flip +/- Sign
             </button>
+          </div>
           </div>
         )}
 
@@ -617,8 +641,10 @@ function TransactionList({
                           </button>
                         )}
                       </td>
-                      <td className="import-shell__cell--amount">
-                        {currencyFormatter.format(transaction.amount)}
+                      <td
+                        className={`import-shell__cell--amount ${transaction.amount < 0 ? "import-shell__cell--negative" : ""}`}
+                      >
+                        {accountingCurrencyFormatter.format(transaction.amount)}
                       </td>
                     </tr>
                   );
@@ -627,8 +653,10 @@ function TransactionList({
               <tfoot>
                 <tr className="import-shell__table-total-row">
                   <td colSpan={footerColSpan}>Total</td>
-                  <td className="import-shell__cell--amount">
-                    {currencyFormatter.format(visibleTotal)}
+                  <td
+                    className={`import-shell__cell--amount ${visibleTotal < 0 ? "import-shell__cell--negative" : ""}`}
+                  >
+                    {accountingCurrencyFormatter.format(visibleTotal)}
                   </td>
                 </tr>
               </tfoot>

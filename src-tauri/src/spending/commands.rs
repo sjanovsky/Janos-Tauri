@@ -263,6 +263,26 @@ pub fn update_transaction_categories(
 }
 
 #[tauri::command]
+pub fn flip_transaction_amounts(
+    state: State<DbState>,
+    transaction_ids: Vec<String>,
+) -> Result<(), String> {
+    // Multiply each amount by -1 in one transaction so a failure doesn't leave the batch half-flipped.
+    let mut conn = state.0.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    {
+        let mut stmt = tx
+            .prepare("UPDATE transactions SET amount = -amount WHERE id = ?1")
+            .map_err(|e| e.to_string())?;
+        for id in &transaction_ids {
+            stmt.execute(params![id]).map_err(|e| e.to_string())?;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn list_categories(state: State<DbState>) -> Result<Vec<CategoryRecord>, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn

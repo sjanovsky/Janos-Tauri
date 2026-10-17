@@ -3,6 +3,13 @@ export const currencyFormatter = new Intl.NumberFormat("en-US", {
   currency: "USD",
 });
 
+// Accounting-style currency for transaction lists: negatives read "($12.34)" instead of "-$12.34".
+export const accountingCurrencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  currencySign: "accounting",
+});
+
 // Whole-dollar currency (no cents) for the chart's bar totals and the spending totals table.
 export const wholeCurrencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",

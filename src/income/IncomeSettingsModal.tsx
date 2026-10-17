@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Modal from "../spending/Modal";
+import { ColorSwatchPicker } from "../spending/ColorSwatchPicker";
 import { BUCKET_COLOR_PALETTE, type CategoryRecord } from "../spending/lib/categories";
 import "./income.css";
 
@@ -40,11 +41,10 @@ function IncomeSettingsModal({
           <ul className="income-settings__list">
             {categories.map((category) => (
               <li key={category.id} className="income-settings__row">
-                <input
-                  type="color"
-                  aria-label={`${category.label} color`}
+                <ColorSwatchPicker
+                  label={`${category.label} color`}
                   value={category.color}
-                  onChange={(event) => onUpdateCategory(category.id, category.label, event.target.value)}
+                  onChange={(color) => onUpdateCategory(category.id, category.label, color)}
                 />
                 <input
                   className="income-settings__text"

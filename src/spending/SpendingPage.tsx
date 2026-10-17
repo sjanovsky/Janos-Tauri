@@ -542,6 +542,26 @@ function SpendingPage() {
     });
   };
 
+  const handleBulkFlipSign = (transactionIds: string[]) => {
+    if (transactionIds.length === 0) {
+      return;
+    }
+    const idSet = new Set(transactionIds);
+    setUploads((current) =>
+      current.map((upload) => ({
+        ...upload,
+        transactions: upload.transactions.map((transaction) =>
+          idSet.has(transaction.id) ? { ...transaction, amount: -transaction.amount } : transaction,
+        ),
+      })),
+    );
+
+    invoke("flip_transaction_amounts", { transactionIds }).catch((error) => {
+      console.error("Failed to save sign flip", error);
+      setDbError("Couldn't save those amount changes to the database.");
+    });
+  };
+
   // Shared by the Spending-page settings modal and the Sankey page's.
   const bucketsAndCategoriesProps = useBucketsAndCategories({
     buckets,
@@ -609,6 +629,7 @@ function SpendingPage() {
             bankRecords={bankRecords}
             onCategoryChange={handleCategoryChange}
             onBulkCategoryChange={handleBulkCategoryChange}
+            onBulkFlipSign={handleBulkFlipSign}
           />
         </div>
       </section>

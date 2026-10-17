@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { ChartRange } from "./lib/transactionSummary";
 import type { DivergingScale } from "./lib/chartScale";
-import { getCategoryLabel } from "./lib/categories";
+import { getCategoryLabel, softenColor } from "./lib/categories";
 import { currencyFormatter, wholeCurrencyFormatter } from "./lib/format";
 
 const COLUMN_BASIS_BY_RANGE: Record<ChartRange, number> = { day: 26, month: 60, year: 84 };
@@ -242,7 +242,7 @@ function SpendingChart({
                               className={`import-shell__totals-label import-shell__totals-label--bucket ${
                                 row.sectionStart ? "import-shell__totals-label--section-start" : ""
                               } ${rowSelected ? "import-shell__totals-label--selected" : ""}`}
-                              style={{ "--bucket": row.color } as CSSProperties}
+                              style={{ "--bucket": softenColor(row.color) } as CSSProperties}
                               title={`Filter the table to ${row.label}`}
                               aria-pressed={rowSelected}
                               onClick={() => onToggleBucketFilter(row.bucketId)}
@@ -261,7 +261,7 @@ function SpendingChart({
                             className={`import-shell__totals-label import-shell__totals-label--item ${
                               row.sectionStart ? "import-shell__totals-label--section-start" : ""
                             } ${rowSelected ? "import-shell__totals-label--selected" : ""}`}
-                            style={{ "--bucket": row.color } as CSSProperties}
+                            style={{ "--bucket": softenColor(row.color) } as CSSProperties}
                             title={`Filter the table to ${getCategoryLabel(row.category)}`}
                             aria-pressed={rowSelected}
                             onClick={() => onToggleCategoryFilter(row.category)}
@@ -394,7 +394,7 @@ function SpendingChart({
                                       top: `calc(${topPct}% + 1px)`,
                                       height: `calc(${heightPct}% - 2px)`,
                                       width: "75%",
-                                      background: segment.color,
+                                      background: softenColor(segment.color),
                                       borderRadius,
                                     }}
                                     aria-label={`Filter the table to ${point.label} ${segment.label}: ${currencyFormatter.format(segment.value)}`}
@@ -438,7 +438,7 @@ function SpendingChart({
                                 className={`import-shell__totals-row import-shell__totals-row--bucket ${
                                   row.sectionStart ? "import-shell__totals-row--section-start" : ""
                                 }`}
-                                style={{ "--bucket": row.color } as CSSProperties}
+                                style={{ "--bucket": softenColor(row.color) } as CSSProperties}
                               >
                                 {row.perColumn.map((value, index) => {
                                   const point = activeSeries[index];
@@ -467,7 +467,7 @@ function SpendingChart({
                               className={`import-shell__totals-row import-shell__totals-row--item ${
                                 row.sectionStart ? "import-shell__totals-row--section-start" : ""
                               }`}
-                              style={{ "--bucket": row.color } as CSSProperties}
+                              style={{ "--bucket": softenColor(row.color) } as CSSProperties}
                             >
                               {row.perColumn.map((value, index) => {
                                 const point = activeSeries[index];
@@ -536,7 +536,7 @@ function SpendingChart({
               if (hovered) {
                 return (
                   <div className="import-shell__tooltip-row">
-                    <span className="import-shell__tooltip-key" style={{ background: hovered.color }} />
+                    <span className="import-shell__tooltip-key" style={{ background: softenColor(hovered.color) }} />
                     <strong>{currencyFormatter.format(hovered.value)}</strong>
                     <span>{hovered.label}</span>
                   </div>

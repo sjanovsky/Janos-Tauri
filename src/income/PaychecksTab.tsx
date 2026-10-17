@@ -1,8 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import NumberField from "../taxes/NumberField";
 import type { ImportedTransaction } from "../upload/lib/csvParser";
 import LineItemsManager from "./LineItemsManager";
-import PaycheckSettingsModal from "./PaycheckSettingsModal";
 import {
   UNGROUPED_ITEMS_BUCKET_ID,
   currentVersion,
@@ -90,6 +89,25 @@ const prettyDate = (iso: string) => {
 // forward. A one-off version adjusts a single deposit (a commission check) without touching the
 // paycheck's numbers.
 //
+function GearIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
 // The grid is read-only. "Edit" unlocks only the numbers and dates; the structure lives elsewhere:
 // "Line items" manages the shared buckets and items, and a paycheck's ⋯ opens its settings.
 function PaychecksTab({
@@ -116,9 +134,6 @@ function PaychecksTab({
 }: PaychecksTabProps) {
   const [editing, setEditing] = useState(false);
   const [managingItems, setManagingItems] = useState(false);
-  const [settingsFor, setSettingsFor] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState("");
   // Which version each paycheck's column is showing; unset means its current one.
   const [viewing, setViewing] = useState<Record<string, string>>({});
   // The paycheck whose "new version" date picker is open, and its date.
@@ -203,16 +218,6 @@ function PaychecksTab({
       return versionId ? { ...rest, [paycheckId]: versionId } : rest;
     });
 
-  const addPaycheck = () => {
-    const name = newName.trim();
-    if (name) {
-      onAddPaycheck(name);
-      setNewName("");
-      setAdding(false);
-      setEditing(true);
-    }
-  };
-
   const createVersion = (paycheckId: string, copyFrom: string) => {
     if (!versioning || !versioning.date) {
       return;
@@ -243,12 +248,22 @@ function PaychecksTab({
 
   const colCount = columns.length + 1;
   const empty = paychecks.length === 0;
-  const settingsPaycheck =
-    paychecks.find((paycheck) => paycheck.id === settingsFor) ?? null;
+
+  // Clicking a paycheck's column (outside its own buttons and fields) filters the deposits to it.
+  const selectColumn = (paycheckId: string, event: MouseEvent) => {
+    if ((event.target as HTMLElement).closest("input, button, label")) {
+      return;
+    }
+    onSelectPaycheck(selectedPaycheckId === paycheckId ? null : paycheckId);
+  };
 
   const cellsFor = (render: (column: (typeof columns)[number]) => ReactNode) =>
     columns.map((column) => (
-      <td key={column.paycheck.id} className="pgrid__cell">
+      <td
+        key={column.paycheck.id}
+        className={`pgrid__cell pgrid__cell--pick ${selectedPaycheckId === column.paycheck.id ? "pgrid__cell--selected" : ""}`}
+        onClick={(event) => selectColumn(column.paycheck.id, event)}
+      >
         {column.shown ? render(column) : null}
       </td>
     ));
@@ -256,69 +271,32 @@ function PaychecksTab({
   // The controls above the grid, with the paycheck check at the right.
   const toolbar = (
     <div className="pgrid__toolbar">
-      <button
-        type="button"
-        className={`pgrid__edit ${editing ? "pgrid__edit--on" : ""}`}
-        aria-pressed={editing}
-        title="Edit amounts and dates"
-        onClick={() => setEditing((current) => !current)}
-      >
-        {editing ? "Done" : "Edit"}
-      </button>
-      <button
-        type="button"
-        className="pgrid__tool"
-        onClick={() => setManagingItems(true)}
-      >
-        Line items
-      </button>
-      {adding ? (
-        <form
-          className="pgrid__newpaycheck"
-          onSubmit={(event) => {
-            event.preventDefault();
-            addPaycheck();
-          }}
-        >
-          <input
-            autoFocus
-            placeholder="Paycheck name"
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setAdding(false);
-              }
-            }}
-          />
-          <button type="submit" disabled={!newName.trim()}>
-            Add
-          </button>
-        </form>
-      ) : (
-        <button
-          type="button"
-          className="pgrid__tool"
-          onClick={() => setAdding(true)}
-        >
-          ＋ Paycheck
-        </button>
-      )}
-      {check?.status === "ok" && (
-        <span
-          className="income-check income-check--ok"
-          role="status"
-          title={`Every deposit matches its paycheck's net (${money(check.deposited)} deposited).`}
-        >
-          ✓ Paychecks tie to the bank
-        </span>
-      )}
       {check?.status === "mismatch" && (
         <span className="income-check income-check--mismatch" role="status">
           {check.mismatched} of {check.count} deposit
           {check.count === 1 ? "" : "s"} don't match
         </span>
       )}
+      <div className="pgrid__toolbar-actions">
+        <button
+          type="button"
+          className={`pgrid__edit ${editing ? "pgrid__edit--on" : ""}`}
+          aria-pressed={editing}
+          title="Edit amounts and dates"
+          onClick={() => setEditing((current) => !current)}
+        >
+          {editing ? "Done" : "Edit"}
+        </button>
+        <button
+          type="button"
+          className="pgrid__gear"
+          aria-label="Open paycheck settings"
+          title="Paycheck settings"
+          onClick={() => setManagingItems(true)}
+        >
+          <GearIcon />
+        </button>
+      </div>
     </div>
   );
 
@@ -335,7 +313,9 @@ function PaychecksTab({
         </div>
       ) : (
         <div className="pgrid__scroll">
-          <table className="pgrid__table">
+          <table
+            className={`pgrid__table ${editing ? "pgrid__table--editing" : "pgrid__table--display"}`}
+          >
             <thead>
               <tr>
                 <th className="pgrid__label pgrid__corner" />
@@ -365,17 +345,6 @@ function PaychecksTab({
                         style={{ background: paycheck.color }}
                       />
                       <strong className="pgrid__name">{paycheck.name}</strong>
-                      {editing && (
-                        <button
-                          type="button"
-                          className="pgrid__more"
-                          aria-label={`${paycheck.name} settings`}
-                          title="Name, color, deposit name, delete"
-                          onClick={() => setSettingsFor(paycheck.id)}
-                        >
-                          ⋯
-                        </button>
-                      )}
                     </div>
                     <div className="pgrid__pattern pgrid__pattern--static">
                       {paycheck.depositPattern || "No deposit name"}
@@ -390,10 +359,6 @@ function PaychecksTab({
                           ),
                         ];
                         const open = menuFor === paycheck.id;
-                        const lastDated =
-                          shown &&
-                          !shown.transactionId &&
-                          datedVersions(paycheck).length <= 1;
                         return (
                           <>
                             <div className="pgrid__versionbar">
@@ -411,39 +376,14 @@ function PaychecksTab({
                                   setMenuFor(open ? null : paycheck.id)
                                 }
                               >
+                                {shown?.id === current?.id && <em>Current</em>}
                                 <span>
                                   {shown ? versionLabel(shown) : "No version"}
                                 </span>
-                                {shown?.id === current?.id && <em>Current</em>}
                                 {options.length > 1 && (
                                   <i aria-hidden="true">▾</i>
                                 )}
                               </button>
-                              {editing && shown && (
-                                <button
-                                  type="button"
-                                  className="pgrid__version-x"
-                                  aria-label={
-                                    shown.transactionId
-                                      ? "Remove this one-off"
-                                      : "Delete this version"
-                                  }
-                                  title={
-                                    lastDated
-                                      ? "A paycheck needs at least one version"
-                                      : shown.transactionId
-                                        ? "Remove this one-off"
-                                        : "Delete this version"
-                                  }
-                                  disabled={!!lastDated}
-                                  onClick={() => {
-                                    onDeleteVersion(shown.id);
-                                    showVersion(paycheck.id, null);
-                                  }}
-                                >
-                                  ✕
-                                </button>
-                              )}
                             </div>
 
                             {open && (
@@ -612,6 +552,8 @@ function PaychecksTab({
                   colCount={colCount}
                   editing={editing}
                   onSetValue={onSetValue}
+                  selectedPaycheckId={selectedPaycheckId}
+                  onSelectColumn={selectColumn}
                 />
               ))}
 
@@ -672,6 +614,36 @@ function PaychecksTab({
                   );
                 })}
               </tr>
+              {editing && (
+                <tr className="pgrid__removerow pgrid__pin pgrid__pin--remove">
+                  <th className="pgrid__label" scope="row" />
+                  {cellsFor(({ paycheck, shown }) => {
+                    const lastDated =
+                      !shown.transactionId &&
+                      datedVersions(paycheck).length <= 1;
+                    return (
+                      <button
+                        type="button"
+                        className="pgrid__version-delete"
+                        title={
+                          lastDated
+                            ? "A paycheck needs at least one version"
+                            : undefined
+                        }
+                        disabled={lastDated}
+                        onClick={() => {
+                          onDeleteVersion(shown.id);
+                          showVersion(paycheck.id, null);
+                        }}
+                      >
+                        {shown.transactionId
+                          ? "Remove one-off"
+                          : "Delete version"}
+                      </button>
+                    );
+                  })}
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -740,6 +712,13 @@ function PaychecksTab({
 
       {managingItems && (
         <LineItemsManager
+          paychecks={paychecks}
+          onAddPaycheck={(name) => {
+            onAddPaycheck(name);
+            setEditing(true);
+          }}
+          onUpdatePaycheck={onUpdatePaycheck}
+          onDeletePaycheck={onDeletePaycheck}
           buckets={buckets}
           items={items}
           onClose={() => setManagingItems(false)}
@@ -749,18 +728,6 @@ function PaychecksTab({
           onDeleteItem={onDeleteItem}
           onMoveItem={onMoveItem}
           onMoveBucket={onMoveBucket}
-        />
-      )}
-
-      {settingsPaycheck && (
-        <PaycheckSettingsModal
-          paycheck={settingsPaycheck}
-          onClose={() => setSettingsFor(null)}
-          onUpdate={(patch) => onUpdatePaycheck(settingsPaycheck.id, patch)}
-          onDelete={() => {
-            setSettingsFor(null);
-            onDeletePaycheck(settingsPaycheck.id);
-          }}
         />
       )}
     </div>
@@ -783,6 +750,8 @@ type SectionProps = {
   colCount: number;
   editing: boolean;
   onSetValue: PaychecksTabProps["onSetValue"];
+  selectedPaycheckId: string | null;
+  onSelectColumn: (paycheckId: string, event: MouseEvent) => void;
 };
 
 // One bucket: a header row, a row per line item with a cell per paycheck, and a subtotal.
@@ -792,6 +761,8 @@ function SectionRows({
   colCount,
   editing,
   onSetValue,
+  selectedPaycheckId,
+  onSelectColumn,
 }: SectionProps) {
   return (
     <>
@@ -807,7 +778,11 @@ function SectionRows({
             {item.label}
           </th>
           {columns.map(({ paycheck, shown }) => (
-            <td key={paycheck.id} className="pgrid__cell">
+            <td
+              key={paycheck.id}
+              className={`pgrid__cell pgrid__cell--pick ${selectedPaycheckId === paycheck.id ? "pgrid__cell--selected" : ""}`}
+              onClick={(event) => onSelectColumn(paycheck.id, event)}
+            >
               {editing ? (
                 <NumberField
                   ariaLabel={`${item.label} amount for ${paycheck.name}`}
@@ -844,7 +819,11 @@ function SectionRows({
           {section.name} subtotal
         </th>
         {columns.map(({ paycheck, shown }) => (
-          <td key={paycheck.id} className="pgrid__cell">
+          <td
+              key={paycheck.id}
+              className={`pgrid__cell pgrid__cell--pick ${selectedPaycheckId === paycheck.id ? "pgrid__cell--selected" : ""}`}
+              onClick={(event) => onSelectColumn(paycheck.id, event)}
+            >
             <span className="pgrid__value">
               {money(
                 paycheckSubtotal(

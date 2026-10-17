@@ -715,6 +715,26 @@ function IncomePage({ view = "income" }: IncomePageProps) {
     );
   };
 
+  const handleBulkFlipSign = (transactionIds: string[]) => {
+    if (transactionIds.length === 0) {
+      return;
+    }
+    const idSet = new Set(transactionIds);
+    setUploads((current) =>
+      current.map((upload) => ({
+        ...upload,
+        transactions: upload.transactions.map((transaction) =>
+          idSet.has(transaction.id) ? { ...transaction, amount: -transaction.amount } : transaction,
+        ),
+      })),
+    );
+
+    invoke("flip_transaction_amounts", { transactionIds }).catch((error) => {
+      console.error("Failed to save sign flip", error);
+      setDbError("Couldn't save those amount changes to the database.");
+    });
+  };
+
   // --- Income categories (spending categories placed in the Income bucket) ---
   const handleAddCategory = (label: string, color: string) => {
     const previous = categoryRecords;
@@ -1181,16 +1201,6 @@ function IncomePage({ view = "income" }: IncomePageProps) {
     <>
       {dbError && <div className="import-shell__db-error">{dbError}</div>}
 
-      {tab === "monthly" && depositCheck.status === "ok" && (
-        <p
-          className="income-check income-check--ok"
-          role="status"
-          title={`Every deposit matches its paycheck's net (${depositCheck.deposited.toLocaleString(undefined, { style: "currency", currency: "USD" })} deposited).`}
-        >
-          ✓ Paychecks tie to the bank
-        </p>
-      )}
-
       <section className="import-shell__panel">
         <div className="import-shell__master-layout">
           {tab === "monthly" && (
@@ -1268,6 +1278,7 @@ function IncomePage({ view = "income" }: IncomePageProps) {
             bankRecords={bankRecords}
             onCategoryChange={handleCategoryChange}
             onBulkCategoryChange={handleBulkCategoryChange}
+            onBulkFlipSign={handleBulkFlipSign}
           />
         </div>
       </section>

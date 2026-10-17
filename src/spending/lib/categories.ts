@@ -40,18 +40,57 @@ export const UNCLASSIFIED_BUCKET_COLOR = "#dc2626";
 export const EXCLUDE_BUCKET_ID = "__exclude";
 export const EXCLUDE_BUCKET_COLOR = "#e11d48";
 
-// New buckets cycle through this palette so each one starts with a distinct color;
-// the user can recolor any bucket with its swatch.
+// Muted palette offered as swatches in the color picker. New buckets cycle through it so each
+// starts with a distinct, harmonious color; users can still pick a custom color.
 export const BUCKET_COLOR_PALETTE = [
-  "#4f46e5",
-  "#0ca678",
-  "#e8590c",
-  "#d6336c",
-  "#1098ad",
-  "#f08c00",
-  "#5f3dc4",
-  "#2b8a3e",
+  "#5b6fb5",
+  "#6fa58a",
+  "#c27a86",
+  "#d4a55a",
+  "#c9815f",
+  "#4f9a9f",
+  "#8e6ba8",
+  "#7c93a8",
+  "#8fa05a",
+  "#a8806b",
+  "#6a9fc9",
+  "#c9b458",
+  "#4f8a68",
+  "#b8869f",
+  "#9a82c4",
+  "#cf8a4e",
+  "#8b93a1",
+  "#5d6674",
 ];
+
+// Pulls any color toward the palette's saturation/lightness range so a neon custom pick still
+// renders tastefully in charts. The stored color is untouched; clamp only when drawing.
+export function softenColor(hex: string): string {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) {
+    return hex;
+  }
+  const n = parseInt(match[1], 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let l = (max + min) / 2;
+  let s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  s = Math.min(s, 0.5);
+  l = Math.min(Math.max(l, 0.42), 0.62);
+  return `hsl(${h.toFixed(0)} ${(s * 100).toFixed(0)}% ${(l * 100).toFixed(0)}%)`;
+}
 
 export function nextBucketColor(existingCount: number): string {
   return BUCKET_COLOR_PALETTE[existingCount % BUCKET_COLOR_PALETTE.length];

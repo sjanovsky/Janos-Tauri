@@ -1176,9 +1176,10 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 0.6rem;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
   margin-bottom: 0.75rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.6rem 0.75rem;
   border: 1px solid #c7d2fe;
   border-radius: 8px;
   background: #eef2ff;
@@ -1191,9 +1192,38 @@
   white-space: nowrap;
 }
 
+.import-shell__bulk-group {
+  margin-left: auto;
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.import-shell__bulk-secondary {
+  border: 1px solid #a5b4fc;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  background: white;
+  color: #3730a3;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.import-shell__bulk-secondary:hover:not(:disabled) {
+  background: #e0e7ff;
+}
+
+.import-shell__bulk-secondary:disabled {
+  color: #a5b4fc;
+  cursor: not-allowed;
+}
+
 .import-shell__bulk-select {
-  flex: 1;
-  min-width: 0;
+  width: 15rem;
+  max-width: 100%;
+  box-sizing: border-box;
   border: 1px solid #d1d5db;
   border-radius: 8px;
   padding: 0.4rem 0.6rem;
@@ -1471,6 +1501,10 @@
 .import-shell__table th.import-shell__cell--amount,
 .import-shell__table td.import-shell__cell--amount {
   text-align: right;
+}
+
+.import-shell__table td.import-shell__cell--negative {
+  color: #dc2626;
 }
 
 .import-shell__table th.import-shell__cell--category,
@@ -3274,4 +3308,71 @@ textarea.bucket-row__name {
 
 .custom-import__intake-actions .custom-import__options {
   flex: 1;
+}
+
+/* Curated color swatch picker (popover of palette colors + native custom picker). */
+.swatch-picker {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.swatch-picker__button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.swatch-picker__popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  padding: 0.6rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+
+.swatch-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(6, 22px);
+  gap: 6px;
+}
+
+.swatch-picker__option {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.swatch-picker__option--active {
+  border-color: #0f172a;
+}
+
+.swatch-picker__custom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f1f5f9;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.swatch-picker__custom input {
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
 }

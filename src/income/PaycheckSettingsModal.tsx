@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Modal from "../spending/Modal";
+import { ColorSwatchPicker } from "../spending/ColorSwatchPicker";
 import type { PaycheckRecord } from "./lib/income";
 
 type PaycheckSettingsModalProps = {
@@ -29,11 +30,10 @@ function PaycheckSettingsModal({
         <label className="pset__field">
           <span>Name</span>
           <div className="pset__row">
-            <input
-              type="color"
-              aria-label="Color"
+            <ColorSwatchPicker
+              label="Color"
               value={paycheck.color}
-              onChange={(event) => onUpdate({ color: event.target.value })}
+              onChange={(color) => onUpdate({ color })}
             />
             <input
               defaultValue={paycheck.name}

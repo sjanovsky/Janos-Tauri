@@ -837,8 +837,33 @@
   flex-shrink: 0;
 }
 
-.pgrid__toolbar .income-check {
-  margin: 0 0 0 auto;
+.pgrid__toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.pgrid .pgrid__gear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #374151;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.pgrid .pgrid__gear:hover,
+.pgrid .pgrid__gear:focus-visible {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #4f46e5;
 }
 
 .pgrid__corner {
@@ -948,4 +973,177 @@
   display: block;
   width: 100%;
   margin-top: 0.3rem;
+}
+
+.income-settings__dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+}
+
+.income-settings__table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.income-settings__table th:nth-child(1) {
+  width: 45%;
+}
+
+.income-settings__table th:nth-child(3) {
+  width: 5.5rem;
+}
+
+.income-settings__table .income-settings__row {
+  min-width: 0;
+}
+
+.income-settings__table .income-settings__row .income-settings__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.income-settings__table th {
+  padding: 0 8px 6px 0;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.income-settings__table td {
+  padding: 4px 8px 4px 0;
+  vertical-align: middle;
+}
+
+.income-settings__table td .income-settings__text {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.income-settings__actions {
+  white-space: nowrap;
+  text-align: right;
+  padding-right: 0;
+}
+
+/* Display (non-edit) view: compact rows, hairline dividers, clearer subtotals. */
+.pgrid__table--display tbody th,
+.pgrid__table--display tbody td {
+  padding-top: 0.1rem;
+  padding-bottom: 0.1rem;
+}
+
+.pgrid__table--display .pgrid__value {
+  padding: 0.2rem 0;
+}
+
+.pgrid__table--display tbody tr:not(.pgrid__bucket):not(.pgrid__subtotal):not(.pgrid__pin):not(.pgrid__gross) > * {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.pgrid__table--display tbody tr:not(.pgrid__bucket):not(.pgrid__subtotal):not(.pgrid__pin):not(.pgrid__gross):hover > *,
+.pgrid__table--display tbody tr:not(.pgrid__bucket):not(.pgrid__subtotal):not(.pgrid__pin):not(.pgrid__gross):hover > th.pgrid__label {
+  background: #f8fafc;
+}
+
+.pgrid__table--display .pgrid__bucket th {
+  padding-top: 0.7rem;
+  padding-bottom: 0.15rem;
+}
+
+.pgrid__table--display .pgrid__subtotal th,
+.pgrid__table--display .pgrid__subtotal td {
+  border-top: 1px solid #e5e7eb;
+  color: #374151;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.pgrid__table--display .pgrid__subtotal .pgrid__value {
+  padding: 0.25rem 0;
+}
+
+.pgrid__table--display .pgrid__cell {
+  min-width: 9rem;
+}
+
+.pgrid__cell--pick {
+  cursor: pointer;
+}
+
+.pgrid__table .pgrid__cell--selected {
+  background: #f5f7ff;
+}
+
+.pgrid .pgrid__version-delete {
+  display: block;
+  width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.28rem 0.7rem;
+  border: 1px dashed #fecaca;
+  border-radius: 10px;
+  background: transparent;
+  color: #dc2626;
+  font-size: 0.76rem;
+  font-weight: 700;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.pgrid .pgrid__version-delete:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.pgrid .pgrid__version-delete:disabled {
+  border-color: #e2e8f0;
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+/* Header text sits on the right, with the "Current" badge leading the version dropdown. */
+.pgrid__title {
+  justify-content: flex-end;
+}
+
+.pgrid__pattern {
+  text-align: right;
+}
+
+.pgrid .pgrid__version--select {
+  justify-content: flex-end;
+}
+
+.pgrid__version--select em {
+  margin-right: auto;
+}
+
+/* The deposit name is plain text, so it gets no input-style box on hover. */
+.pgrid__pattern--static:hover {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* In Edit mode the pinned footer grows a delete row beneath deposits. */
+.pgrid__pin--remove > th,
+.pgrid__pin--remove > td {
+  bottom: 0;
+  height: 2.6rem;
+}
+
+.pgrid__table--editing .pgrid__pin--deposits > th,
+.pgrid__table--editing .pgrid__pin--deposits > td {
+  bottom: 2.6rem;
+}
+
+.pgrid__table--editing .pgrid__pin--net > th,
+.pgrid__table--editing .pgrid__pin--net > td {
+  bottom: 5.6rem;
+}
+
+.pgrid__pin--remove .pgrid__version-delete {
+  margin-top: 0;
 }

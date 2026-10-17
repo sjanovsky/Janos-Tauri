@@ -7,6 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import Modal from "../spending/Modal";
+import { ColorSwatchPicker } from "../spending/ColorSwatchPicker";
 import {
   CloseIcon,
   GripIcon,
@@ -17,9 +18,20 @@ import {
   BUCKET_COLOR_PALETTE,
   UNGROUPED_BUCKET_COLOR,
 } from "../spending/lib/categories";
-import type { PaycheckBucketRecord, PaycheckItemRecord } from "./lib/income";
+import type {
+  PaycheckBucketRecord,
+  PaycheckItemRecord,
+  PaycheckRecord,
+} from "./lib/income";
 
 type LineItemsManagerProps = {
+  paychecks: PaycheckRecord[];
+  onAddPaycheck: (name: string) => void;
+  onUpdatePaycheck: (
+    id: string,
+    patch: Partial<Pick<PaycheckRecord, "name" | "depositPattern" | "color">>,
+  ) => void;
+  onDeletePaycheck: (id: string) => void;
   buckets: PaycheckBucketRecord[];
   items: PaycheckItemRecord[];
   onClose: () => void;
@@ -77,6 +89,10 @@ function autoGrowTextarea(el: HTMLTextAreaElement) {
 // rename it. New line items start Ungrouped. The grid only ever edits numbers; this is where the
 // structure is edited.
 function LineItemsManager({
+  paychecks,
+  onAddPaycheck,
+  onUpdatePaycheck,
+  onDeletePaycheck,
   buckets,
   items,
   onClose,
@@ -87,6 +103,9 @@ function LineItemsManager({
   onMoveItem,
   onMoveBucket,
 }: LineItemsManagerProps) {
+  const [tab, setTab] = useState<"paychecks" | "items">("paychecks");
+  const [newPaycheck, setNewPaycheck] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [newBucket, setNewBucket] = useState("");
   const [newItem, setNewItem] = useState("");
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
@@ -254,13 +273,23 @@ function LineItemsManager({
         <nav
           className="manage-modal__tabs"
           role="tablist"
-          aria-label="Line items"
+          aria-label="Paycheck settings"
         >
           <button
             type="button"
             role="tab"
-            aria-selected="true"
-            className="manage-modal__tab manage-modal__tab--active"
+            aria-selected={tab === "paychecks"}
+            className={`manage-modal__tab ${tab === "paychecks" ? "manage-modal__tab--active" : ""}`}
+            onClick={() => setTab("paychecks")}
+          >
+            Paychecks
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "items"}
+            className={`manage-modal__tab ${tab === "items" ? "manage-modal__tab--active" : ""}`}
+            onClick={() => setTab("items")}
           >
             <span className="manage-modal__tab-icon">
               <BucketsIcon />
@@ -270,271 +299,400 @@ function LineItemsManager({
         </nav>
 
         <div className="manage-modal__body">
-          <section className="category-manager">
-            <div className="category-manager__heading">
-              <h2>Buckets &amp; line items</h2>
-              <p>
-                Drag a line item into a bucket to group it, or onto “Ungrouped”
-                to pull it back out. These are shared by every paycheck; each
-                paycheck keeps its own amounts in the grid. Double-click a line
-                item to rename it.
-              </p>
-            </div>
-
-            <div className="bucket-board">
-              <div className="bucket-board__header">
-                <span className="bucket-board__header-label">Bucket</span>
-                <span className="bucket-board__header-label">Line items</span>
+          {tab === "paychecks" && (
+            <section className="category-manager">
+              <div className="category-manager__heading">
+                <h2>Paychecks</h2>
+                <p>
+                  Each paycheck is a template with its own amounts and its own
+                  income category for matching deposits.
+                </p>
               </div>
-
-              {orderedBuckets.map((bucket) => {
-                const members = itemsIn(bucket.id);
-                return (
-                  <div
-                    key={bucket.id}
-                    className={`bucket-row ${dragOverKey === bucket.id ? "bucket-row--drop" : ""} ${
-                      draggingBucketId === bucket.id
-                        ? "bucket-row--dragging"
-                        : ""
-                    }`}
-                    onDragOver={(event: DragEvent<HTMLDivElement>) => {
-                      if (draggingBucketId) {
-                        event.preventDefault();
-                        event.dataTransfer.dropEffect = "move";
-                      } else if (draggingItemId) {
-                        event.preventDefault();
-                        event.dataTransfer.dropEffect = "move";
-                        setDragOverKey(bucket.id);
-                      }
-                    }}
-                    onDragLeave={(event) => {
-                      if (
-                        !event.currentTarget.contains(
-                          event.relatedTarget as Node | null,
-                        )
-                      ) {
-                        setDragOverKey((current) =>
-                          current === bucket.id ? null : current,
-                        );
-                      }
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      if (draggingBucketId) {
-                        if (draggingBucketId !== bucket.id) {
-                          // Past the row's midpoint lands after it: before the next bucket.
-                          const rect =
-                            event.currentTarget.getBoundingClientRect();
-                          const after =
-                            event.clientY > rect.top + rect.height / 2;
-                          const index = orderedBuckets.findIndex(
-                            (candidate) => candidate.id === bucket.id,
-                          );
-                          const next = after
-                            ? orderedBuckets[index + 1]
-                            : bucket;
-                          onMoveBucket(draggingBucketId, next?.id ?? null);
-                        }
-                        clearDrag();
-                      } else if (draggingItemId) {
-                        dropItem(draggingItemId, bucket.id, null);
-                      }
-                    }}
-                  >
-                    <div className="bucket-row__head">
-                      <span
-                        className="bucket-row__grip"
-                        role="button"
-                        tabIndex={-1}
-                        draggable
-                        aria-label={`Reorder bucket ${bucket.name}`}
-                        title="Drag to reorder this bucket"
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData(
-                            BUCKET_DRAG_TYPE,
-                            bucket.id,
-                          );
-                          event.dataTransfer.effectAllowed = "move";
-                          const row = (
-                            event.currentTarget as HTMLElement
-                          ).closest(".bucket-row");
-                          if (row) {
-                            event.dataTransfer.setDragImage(row, 24, 20);
-                          }
-                          setDraggingBucketId(bucket.id);
-                        }}
-                        onDragEnd={clearDrag}
-                      >
-                        <GripIcon />
-                      </span>
-                      <input
-                        type="color"
-                        className="bucket-row__swatch"
-                        value={bucket.color}
-                        aria-label={`Color for bucket ${bucket.name}`}
-                        onChange={(event) =>
-                          onSaveBucket({
-                            id: bucket.id,
-                            name: bucket.name,
-                            color: event.target.value,
-                          })
-                        }
-                      />
-                      <textarea
-                        key={bucket.name}
-                        rows={1}
-                        className="bucket-row__name"
-                        defaultValue={bucket.name}
-                        aria-label={`Name for bucket ${bucket.name}`}
-                        ref={(el) => {
-                          if (el) {
-                            autoGrowTextarea(el);
-                          }
-                        }}
-                        onInput={(event) =>
-                          autoGrowTextarea(event.currentTarget)
-                        }
-                        onBlur={(event) => {
-                          const name = event.target.value.trim();
-                          if (name && name !== bucket.name) {
-                            onSaveBucket({
-                              id: bucket.id,
-                              name,
-                              color: bucket.color,
-                            });
-                          } else {
-                            event.target.value = bucket.name;
-                            autoGrowTextarea(event.target);
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            event.currentTarget.blur();
-                          }
-                        }}
-                      />
-                    </div>
-
-                    <div className="bucket-row__items">
-                      {members.length === 0 ? (
-                        <span className="bucket-row__empty">
-                          Drag line items here
-                        </span>
-                      ) : (
-                        members.map((item) =>
-                          renderPill(item, bucket.color, members, bucket.id),
-                        )
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      className="import-shell__upload-delete bucket-row__delete"
-                      aria-label={`Delete bucket ${bucket.name}`}
-                      title="Delete bucket (its line items become ungrouped)"
-                      onClick={() => onDeleteBucket(bucket.id)}
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                );
-              })}
-
-              <div
-                className={`bucket-row bucket-row--ungrouped ${
-                  dragOverKey === "ungrouped" ? "bucket-row--drop" : ""
-                }`}
-                onDragOver={(event) => {
-                  if (draggingItemId) {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                    setDragOverKey("ungrouped");
-                  }
-                }}
-                onDragLeave={(event) => {
-                  if (
-                    !event.currentTarget.contains(
-                      event.relatedTarget as Node | null,
-                    )
-                  ) {
-                    setDragOverKey((current) =>
-                      current === "ungrouped" ? null : current,
-                    );
-                  }
-                }}
-                onDrop={(event) => {
+              <table className="income-settings__table">
+                <thead>
+                  <tr>
+                    <th>Paycheck</th>
+                    <th>Transaction description contains</th>
+                    <th aria-label="Delete" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {paychecks.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="income-settings__empty">
+                        No paychecks yet.
+                      </td>
+                    </tr>
+                  )}
+                  {paychecks.map((paycheck) => (
+                    <tr key={paycheck.id}>
+                      <td>
+                        <div className="income-settings__row">
+                          <ColorSwatchPicker
+                            label={`${paycheck.name} color`}
+                            value={paycheck.color}
+                            onChange={(color) =>
+                              onUpdatePaycheck(paycheck.id, { color })
+                            }
+                          />
+                          <input
+                            className="income-settings__text"
+                            aria-label="Paycheck name"
+                            defaultValue={paycheck.name}
+                            onBlur={(event) => {
+                              const name = event.target.value.trim();
+                              if (name && name !== paycheck.name) {
+                                onUpdatePaycheck(paycheck.id, { name });
+                              } else {
+                                event.target.value = paycheck.name;
+                              }
+                            }}
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <input
+                          className="income-settings__text"
+                          aria-label={`${paycheck.name} transaction description`}
+                          placeholder="e.g. ACME PAYROLL"
+                          defaultValue={paycheck.depositPattern}
+                          onBlur={(event) => {
+                            const depositPattern = event.target.value.trim();
+                            if (depositPattern !== paycheck.depositPattern) {
+                              onUpdatePaycheck(paycheck.id, { depositPattern });
+                            }
+                          }}
+                        />
+                      </td>
+                      <td className="income-settings__actions">
+                        {confirmDeleteId === paycheck.id ? (
+                          <>
+                            <button
+                              type="button"
+                              className="pset__delete"
+                              onClick={() => {
+                                setConfirmDeleteId(null);
+                                onDeletePaycheck(paycheck.id);
+                              }}
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="import-shell__upload-delete"
+                            aria-label={`Delete ${paycheck.name}`}
+                            title="Delete paycheck (its deposits become unclassified)"
+                            onClick={() => setConfirmDeleteId(paycheck.id)}
+                          >
+                            <TrashIcon />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <form
+                className="income-settings__add"
+                onSubmit={(event) => {
                   event.preventDefault();
-                  if (draggingItemId) {
-                    dropItem(draggingItemId, null, null);
+                  const name = newPaycheck.trim();
+                  if (name) {
+                    onAddPaycheck(name);
+                    setNewPaycheck("");
                   }
                 }}
               >
-                <div className="bucket-row__head">
-                  <span className="bucket-row__name bucket-row__name--static">
-                    Ungrouped
-                  </span>
+                <input
+                  className="income-settings__text"
+                  placeholder="New paycheck name"
+                  value={newPaycheck}
+                  onChange={(event) => setNewPaycheck(event.target.value)}
+                />
+                <button type="submit" disabled={!newPaycheck.trim()}>
+                  ＋ Paycheck
+                </button>
+              </form>
+            </section>
+          )}
+          {tab === "items" && (
+            <section className="category-manager">
+              <div className="category-manager__heading">
+                <h2>Buckets &amp; line items</h2>
+                <p>
+                  Drag a line item into a bucket to group it, or onto
+                  “Ungrouped” to pull it back out. These are shared by every
+                  paycheck; each paycheck keeps its own amounts in the grid.
+                  Double-click a line item to rename it.
+                </p>
+              </div>
+
+              <div className="bucket-board">
+                <div className="bucket-board__header">
+                  <span className="bucket-board__header-label">Bucket</span>
+                  <span className="bucket-board__header-label">Line items</span>
                 </div>
-                <div className="bucket-row__items">
-                  {ungrouped.length === 0 ? (
-                    <span className="bucket-row__empty">
-                      Drop here to remove from a bucket
+
+                {orderedBuckets.map((bucket) => {
+                  const members = itemsIn(bucket.id);
+                  return (
+                    <div
+                      key={bucket.id}
+                      className={`bucket-row ${dragOverKey === bucket.id ? "bucket-row--drop" : ""} ${
+                        draggingBucketId === bucket.id
+                          ? "bucket-row--dragging"
+                          : ""
+                      }`}
+                      onDragOver={(event: DragEvent<HTMLDivElement>) => {
+                        if (draggingBucketId) {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                        } else if (draggingItemId) {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          setDragOverKey(bucket.id);
+                        }
+                      }}
+                      onDragLeave={(event) => {
+                        if (
+                          !event.currentTarget.contains(
+                            event.relatedTarget as Node | null,
+                          )
+                        ) {
+                          setDragOverKey((current) =>
+                            current === bucket.id ? null : current,
+                          );
+                        }
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (draggingBucketId) {
+                          if (draggingBucketId !== bucket.id) {
+                            // Past the row's midpoint lands after it: before the next bucket.
+                            const rect =
+                              event.currentTarget.getBoundingClientRect();
+                            const after =
+                              event.clientY > rect.top + rect.height / 2;
+                            const index = orderedBuckets.findIndex(
+                              (candidate) => candidate.id === bucket.id,
+                            );
+                            const next = after
+                              ? orderedBuckets[index + 1]
+                              : bucket;
+                            onMoveBucket(draggingBucketId, next?.id ?? null);
+                          }
+                          clearDrag();
+                        } else if (draggingItemId) {
+                          dropItem(draggingItemId, bucket.id, null);
+                        }
+                      }}
+                    >
+                      <div className="bucket-row__head">
+                        <span
+                          className="bucket-row__grip"
+                          role="button"
+                          tabIndex={-1}
+                          draggable
+                          aria-label={`Reorder bucket ${bucket.name}`}
+                          title="Drag to reorder this bucket"
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData(
+                              BUCKET_DRAG_TYPE,
+                              bucket.id,
+                            );
+                            event.dataTransfer.effectAllowed = "move";
+                            const row = (
+                              event.currentTarget as HTMLElement
+                            ).closest(".bucket-row");
+                            if (row) {
+                              event.dataTransfer.setDragImage(row, 24, 20);
+                            }
+                            setDraggingBucketId(bucket.id);
+                          }}
+                          onDragEnd={clearDrag}
+                        >
+                          <GripIcon />
+                        </span>
+                        <ColorSwatchPicker
+                          value={bucket.color}
+                          label={`Color for bucket ${bucket.name}`}
+                          onChange={(color) =>
+                            onSaveBucket({
+                              id: bucket.id,
+                              name: bucket.name,
+                              color,
+                            })
+                          }
+                        />
+                        <textarea
+                          key={bucket.name}
+                          rows={1}
+                          className="bucket-row__name"
+                          defaultValue={bucket.name}
+                          aria-label={`Name for bucket ${bucket.name}`}
+                          ref={(el) => {
+                            if (el) {
+                              autoGrowTextarea(el);
+                            }
+                          }}
+                          onInput={(event) =>
+                            autoGrowTextarea(event.currentTarget)
+                          }
+                          onBlur={(event) => {
+                            const name = event.target.value.trim();
+                            if (name && name !== bucket.name) {
+                              onSaveBucket({
+                                id: bucket.id,
+                                name,
+                                color: bucket.color,
+                              });
+                            } else {
+                              event.target.value = bucket.name;
+                              autoGrowTextarea(event.target);
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div className="bucket-row__items">
+                        {members.length === 0 ? (
+                          <span className="bucket-row__empty">
+                            Drag line items here
+                          </span>
+                        ) : (
+                          members.map((item) =>
+                            renderPill(item, bucket.color, members, bucket.id),
+                          )
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="import-shell__upload-delete bucket-row__delete"
+                        aria-label={`Delete bucket ${bucket.name}`}
+                        title="Delete bucket (its line items become ungrouped)"
+                        onClick={() => onDeleteBucket(bucket.id)}
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  );
+                })}
+
+                <div
+                  className={`bucket-row bucket-row--ungrouped ${
+                    dragOverKey === "ungrouped" ? "bucket-row--drop" : ""
+                  }`}
+                  onDragOver={(event) => {
+                    if (draggingItemId) {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      setDragOverKey("ungrouped");
+                    }
+                  }}
+                  onDragLeave={(event) => {
+                    if (
+                      !event.currentTarget.contains(
+                        event.relatedTarget as Node | null,
+                      )
+                    ) {
+                      setDragOverKey((current) =>
+                        current === "ungrouped" ? null : current,
+                      );
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (draggingItemId) {
+                      dropItem(draggingItemId, null, null);
+                    }
+                  }}
+                >
+                  <div className="bucket-row__head">
+                    <span className="bucket-row__name bucket-row__name--static">
+                      Ungrouped
                     </span>
-                  ) : (
-                    ungrouped.map((item) =>
-                      renderPill(item, UNGROUPED_BUCKET_COLOR, ungrouped, null),
-                    )
-                  )}
+                  </div>
+                  <div className="bucket-row__items">
+                    {ungrouped.length === 0 ? (
+                      <span className="bucket-row__empty">
+                        Drop here to remove from a bucket
+                      </span>
+                    ) : (
+                      ungrouped.map((item) =>
+                        renderPill(
+                          item,
+                          UNGROUPED_BUCKET_COLOR,
+                          ungrouped,
+                          null,
+                        ),
+                      )
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="bucket-board__forms">
-              <form className="bucket-board__add" onSubmit={addBucket}>
-                <div className="bucket-board__field">
-                  <input
-                    type="text"
-                    className="category-manager__label-input"
-                    placeholder="New bucket"
-                    value={newBucket}
-                    onChange={(event) => setNewBucket(event.target.value)}
-                  />
-                  {newBucket.trim() && (
-                    <button
-                      type="submit"
-                      className="bucket-board__add-btn"
-                      aria-label="Add bucket"
-                      title="Add bucket"
-                    >
-                      <PlusIcon />
-                    </button>
-                  )}
-                </div>
-              </form>
+              <div className="bucket-board__forms">
+                <form className="bucket-board__add" onSubmit={addBucket}>
+                  <div className="bucket-board__field">
+                    <input
+                      type="text"
+                      className="category-manager__label-input"
+                      placeholder="New bucket"
+                      value={newBucket}
+                      onChange={(event) => setNewBucket(event.target.value)}
+                    />
+                    {newBucket.trim() && (
+                      <button
+                        type="submit"
+                        className="bucket-board__add-btn"
+                        aria-label="Add bucket"
+                        title="Add bucket"
+                      >
+                        <PlusIcon />
+                      </button>
+                    )}
+                  </div>
+                </form>
 
-              <form className="bucket-board__add" onSubmit={addItem}>
-                <div className="bucket-board__field">
-                  <input
-                    type="text"
-                    className="category-manager__label-input"
-                    placeholder="New line item"
-                    value={newItem}
-                    onChange={(event) => setNewItem(event.target.value)}
-                  />
-                  {newItem.trim() && (
-                    <button
-                      type="submit"
-                      className="bucket-board__add-btn"
-                      aria-label="Add line item"
-                      title="Add line item"
-                    >
-                      <PlusIcon />
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
-          </section>
+                <form className="bucket-board__add" onSubmit={addItem}>
+                  <div className="bucket-board__field">
+                    <input
+                      type="text"
+                      className="category-manager__label-input"
+                      placeholder="New line item"
+                      value={newItem}
+                      onChange={(event) => setNewItem(event.target.value)}
+                    />
+                    {newItem.trim() && (
+                      <button
+                        type="submit"
+                        className="bucket-board__add-btn"
+                        aria-label="Add line item"
+                        title="Add line item"
+                      >
+                        <PlusIcon />
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </Modal>

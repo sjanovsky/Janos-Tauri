@@ -247,6 +247,26 @@ function UploadPage() {
     });
   };
 
+  const handleBulkFlipSign = (transactionIds: string[]) => {
+    if (transactionIds.length === 0) {
+      return;
+    }
+    const idSet = new Set(transactionIds);
+    setUploads((current) =>
+      current.map((upload) => ({
+        ...upload,
+        transactions: upload.transactions.map((transaction) =>
+          idSet.has(transaction.id) ? { ...transaction, amount: -transaction.amount } : transaction,
+        ),
+      })),
+    );
+
+    invoke("flip_transaction_amounts", { transactionIds }).catch((error) => {
+      console.error("Failed to save sign flip", error);
+      setDbError("Couldn't save those amount changes to the database.");
+    });
+  };
+
   const persistUpload = async (
     bankName: string,
     fileName: string,
@@ -434,6 +454,7 @@ function UploadPage() {
             bankRecords={bankRecords}
             onCategoryChange={handleCategoryChange}
             onBulkCategoryChange={handleBulkCategoryChange}
+            onBulkFlipSign={handleBulkFlipSign}
             onConfirmAutoCategorized={handleConfirmAutoCategorized}
           />
         </div>

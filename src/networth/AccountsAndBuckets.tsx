@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
+import { ColorSwatchPicker } from "../spending/ColorSwatchPicker";
 import {
   UNGROUPED_BUCKET_COLOR,
   UNGROUPED_BUCKET_ID,
@@ -497,12 +498,10 @@ function AccountsAndBuckets({
                 >
                   <GripIcon />
                 </span>
-                <input
-                  type="color"
-                  className="bucket-row__swatch"
+                <ColorSwatchPicker
                   value={bucket.color}
-                  aria-label={`Color for bucket ${bucket.name}`}
-                  onChange={(event) => onSetBucketColor(bucket.id, event.target.value)}
+                  label={`Color for bucket ${bucket.name}`}
+                  onChange={(color) => onSetBucketColor(bucket.id, color)}
                 />
                 <textarea
                   key={bucket.name}

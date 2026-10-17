@@ -138,8 +138,8 @@ pub fn upsert_paycheck(
     let mut conn = state.0.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     tx.execute(
-        "INSERT INTO paychecks (id, name, deposit_pattern, position)
-         VALUES (?1, ?2, ?3, COALESCE((SELECT MAX(position) + 1 FROM paychecks), 0))
+        "INSERT INTO paychecks (id, person, name, deposit_pattern, position)
+         VALUES (?1, '', ?2, ?3, COALESCE((SELECT MAX(position) + 1 FROM paychecks), 0))
          ON CONFLICT(id) DO UPDATE SET name = excluded.name,
                                        deposit_pattern = excluded.deposit_pattern",
         params![id, name, deposit_pattern],
