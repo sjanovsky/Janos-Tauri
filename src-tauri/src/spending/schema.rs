@@ -147,8 +147,8 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
-    // Amounts are now always stored with spending positive (the import flips files that list
-    // expenses as negatives), so the per-bank sign setting is retired. Banks that were set to
+    // Amounts are now always stored with spending negative (the import flips files that list
+    // expenses as positives), so the per-bank sign setting is retired. Banks that were set to
     // "negative spending" get their existing amounts flipped to match, then the setting is reset;
     // once reset this is a no-op, so it only ever runs once per bank.
     conn.execute(

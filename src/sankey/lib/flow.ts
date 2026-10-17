@@ -6,7 +6,6 @@
 //   - whatever net doesn't cover is "Shortfall", whatever it doesn't spend is "Left over".
 // Pure functions, no React: everything the page shows is derived here so it can be unit-tested.
 
-import { normalizeBankName } from "../../spending/lib/banks";
 import {
   INCOME_BUCKET_ID,
   UNCLASSIFIED_BUCKET_COLOR,
@@ -127,7 +126,7 @@ const byPosition = <T extends { position: number }>(a: T, b: T) =>
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export function buildFlow(input: FlowInput): FlowResult {
-  const { bounds, paychecks, spendingBuckets, spendingCategories, banks } =
+  const { bounds, paychecks, spendingBuckets, spendingCategories } =
     input;
   const expanded = input.expanded ?? new Set<string>();
   // Net pay is open (showing the spending buckets) unless the caller passes a set without it.
@@ -140,11 +139,6 @@ export function buildFlow(input: FlowInput): FlowResult {
   );
   const categoryById = new Map(
     spendingCategories.map((category) => [category.id, category]),
-  );
-  const spendingPositive = new Map(
-    banks.map(
-      (bank) => [normalizeBankName(bank.name), bank.spendingPositive] as const,
-    ),
   );
 
   // --- Sort the period's transactions into paycheck deposits and spending ---
@@ -161,16 +155,13 @@ export function buildFlow(input: FlowInput): FlowResult {
     if (!date || !inPeriod(date.getTime(), bounds)) {
       continue;
     }
-    const sign =
-      (spendingPositive.get(normalizeBankName(source.sourceBank)) ?? true)
-        ? 1
-        : -1;
     const transaction: FlowTransaction = {
       id: source.id,
       date: source.date,
       description: source.description,
       bank: source.sourceBank,
-      flow: source.amount * sign,
+      // Stored amounts are negative for money out; flow counts money out as positive.
+      flow: -source.amount,
       timestamp: date.getTime(),
     };
 

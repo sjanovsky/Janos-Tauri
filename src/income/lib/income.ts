@@ -1,5 +1,4 @@
 import type { ImportedTransaction } from "../../upload/lib/csvParser";
-import { normalizeBankName, type BankRecord } from "../../spending/lib/banks";
 import { parseDate } from "../../spending/lib/transactionSummary";
 
 // One version of a paycheck: its gross and line-item amounts from `effectiveFrom` through
@@ -160,26 +159,12 @@ export function matchesExpectedNet(net: number, depositAmount: number): boolean 
   return Math.abs(depositAmount - net) <= NET_MATCH_TOLERANCE;
 }
 
-/**
- * The transactions filed under the given income categories, with `amount` turned into income:
- * positive when money arrived, whatever sign the bank's statements use. (Banks that list spending
- * as positive show a deposit as a negative amount, and the reverse for checking exports.)
- */
+/** The transactions filed under the given income categories (income is stored as positive amounts). */
 export function toIncomeTransactions(
   transactions: ImportedTransaction[],
   incomeCategoryIds: Set<string>,
-  banks: Pick<BankRecord, "name" | "spendingPositive">[],
 ): ImportedTransaction[] {
-  const spendingPositive = new Map(
-    banks.map((bank) => [normalizeBankName(bank.name), bank.spendingPositive] as const),
-  );
-
-  return transactions
-    .filter((transaction) => incomeCategoryIds.has(transaction.category))
-    .map((transaction) => {
-      const sign = (spendingPositive.get(normalizeBankName(transaction.sourceBank)) ?? true) ? -1 : 1;
-      return { ...transaction, amount: transaction.amount * sign };
-    });
+  return transactions.filter((transaction) => incomeCategoryIds.has(transaction.category));
 }
 
 export const netSegmentId = (categoryId: string) => `net:${categoryId}`;

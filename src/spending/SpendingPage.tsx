@@ -151,9 +151,15 @@ function SpendingPage() {
     [masterTransactions, selectedCategories, excludedCategories, incomeCategories],
   );
 
+  // Spending is stored as negative amounts; the charts draw it as positive bars above the axis.
+  const spendingChartTransactions = useMemo(
+    () => chartTransactions.map((transaction) => ({ ...transaction, amount: -transaction.amount })),
+    [chartTransactions],
+  );
+
   const chartSeries = useMemo(
-    () => buildChartSeries(chartTransactions, chartRange, categoryList),
-    [chartTransactions, chartRange, categoryList],
+    () => buildChartSeries(spendingChartTransactions, chartRange, categoryList),
+    [spendingChartTransactions, chartRange, categoryList],
   );
 
   // Ordered list of spending buckets that can appear (real buckets by name, then "Ungrouped"),
@@ -225,7 +231,7 @@ function SpendingPage() {
   const bankSeries = useMemo<BucketChartPoint[]>(() => {
     const metaById = new Map(bankMeta.map((meta) => [meta.id, meta]));
     return buildBankSeries(
-      chartTransactions,
+      spendingChartTransactions,
       chartRange,
       bankMeta.map((meta) => meta.id),
     ).map((point) => ({
@@ -238,7 +244,7 @@ function SpendingPage() {
         })
         .filter((segment) => segment.value !== 0),
     }));
-  }, [chartTransactions, chartRange, bankMeta]);
+  }, [spendingChartTransactions, chartRange, bankMeta]);
 
   const activeSeries = groupMode === "bank" ? bankSeries : bucketSeries;
 

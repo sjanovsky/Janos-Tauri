@@ -26,31 +26,21 @@ const tx = (id: string, amount: number, sourceBank: string, category: string): I
 });
 
 describe("toIncomeTransactions", () => {
-  const banks = [
-    { name: "Card", spendingPositive: true },
-    { name: "Checking", spendingPositive: false },
-  ];
   const income = new Set(["income-paycheck"]);
 
-  it("keeps only income categories and makes deposits positive for either sign convention", () => {
+  it("keeps only income categories, with amounts unchanged", () => {
     const result = toIncomeTransactions(
       [
-        tx("a", -1000, "Card", "income-paycheck"),
+        tx("a", 1000, "Card", "income-paycheck"),
         tx("b", 2000, "Checking", "income-paycheck"),
-        tx("c", 50, "Card", "groceries"),
+        tx("c", -50, "Card", "groceries"),
       ],
       income,
-      banks,
     );
     expect(result.map((t) => [t.id, t.amount])).toEqual([
       ["a", 1000],
       ["b", 2000],
     ]);
-  });
-
-  it("treats an unknown bank like a spending-positive one", () => {
-    const [result] = toIncomeTransactions([tx("a", -300, "Other", "income-paycheck")], income, banks);
-    expect(result.amount).toBe(300);
   });
 });
 

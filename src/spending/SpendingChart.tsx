@@ -59,6 +59,8 @@ export type TotalsDisplayRow =
       kind: "category";
       key: string;
       category: string;
+      // Shown instead of the category's own label (e.g. a bucket listed under a Cash Flow group).
+      label?: string;
       perColumn: number[];
       color: string;
       sectionStart: boolean;
@@ -73,6 +75,8 @@ export type TotalsDisplayRow =
       // Set when this bucket total is the whole section (a single-category bucket collapsed into
       // one row), so it carries the gap a category line item would normally provide above it.
       sectionStart?: boolean;
+      // Adds an open/closed chevron to the row's label (e.g. a Cash Flow group's buckets).
+      collapsible?: { collapsed: boolean; onToggle: () => void };
     };
 
 export type SpendingTotals = { displayRows: TotalsDisplayRow[]; netPerColumn: number[] };
@@ -104,6 +108,10 @@ type SpendingChartProps = {
   groupOptions?: { mode: GroupMode; label: string }[];
   // Label of the bottom row that sums every column; "Net" by default.
   netLabel?: string;
+  // A value per column, drawn as a line over the bars (and replacing the label atop each bar).
+  lineValues?: number[];
+  // What the line measures, for the hover tooltip.
+  lineLabel?: string;
 };
 
 // The "Spending by {range}" card: a diverging stacked-bar chart with a per-bucket (or
@@ -133,8 +141,15 @@ function SpendingChart({
   settingsLabel = "Buckets & categories",
   groupOptions,
   netLabel = "Net",
+  lineValues,
+  lineLabel = "Total",
 }: SpendingChartProps) {
   const [tooltipAnchor, setTooltipAnchor] = useState<TooltipAnchor | null>(null);
+  // A lone grouping has nothing to switch between, so the pills only show for two or more.
+  const groupOptionList = groupOptions ?? [
+    { mode: "bucket" as GroupMode, label: bucketLabel },
+    { mode: "bank" as GroupMode, label: "Banks" },
+  ];
 
   return (
     <>
@@ -179,26 +194,25 @@ function SpendingChart({
               <div className="import-shell__chart-grid" aria-label="Transaction summary chart">
                 <div className="import-shell__chart-gutter">
                   <div className="import-shell__y-axis">
-                    <div
-                      className="import-shell__group-toggle"
-                      role="group"
-                      aria-label={`Group ${title.toLowerCase()} by`}
-                    >
-                      {(groupOptions ?? [
-                        { mode: "bucket" as GroupMode, label: bucketLabel },
-                        { mode: "bank" as GroupMode, label: "Banks" },
-                      ]).map(({ mode, label }) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          className={`group-pill ${groupMode === mode ? "group-pill--active" : ""}`}
-                          aria-pressed={groupMode === mode}
-                          onClick={() => onGroupModeChange(mode)}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
+                    {groupOptionList.length > 1 && (
+                      <div
+                        className="import-shell__group-toggle"
+                        role="group"
+                        aria-label={`Group ${title.toLowerCase()} by`}
+                      >
+                        {groupOptionList.map(({ mode, label }) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            className={`group-pill ${groupMode === mode ? "group-pill--active" : ""}`}
+                            aria-pressed={groupMode === mode}
+                            onClick={() => onGroupModeChange(mode)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {chartScale.ticks.map((tick) => (
                       <span
                         key={tick}
@@ -247,6 +261,22 @@ function SpendingChart({
                               aria-pressed={rowSelected}
                               onClick={() => onToggleBucketFilter(row.bucketId)}
                             >
+                              {row.collapsible && (
+                                <span
+                                  role="button"
+                                  tabIndex={-1}
+                                  className={`import-shell__totals-chevron ${
+                                    row.collapsible.collapsed ? "" : "import-shell__totals-chevron--open"
+                                  }`}
+                                  aria-label={`${row.collapsible.collapsed ? "Show" : "Hide"} ${row.label} buckets`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    row.collapsible?.onToggle();
+                                  }}
+                                >
+                                  ▸
+                                </span>
+                              )}
                               <span className="import-shell__totals-label-text">{row.label}</span>
                             </button>
                           );
@@ -262,11 +292,11 @@ function SpendingChart({
                               row.sectionStart ? "import-shell__totals-label--section-start" : ""
                             } ${rowSelected ? "import-shell__totals-label--selected" : ""}`}
                             style={{ "--bucket": softenColor(row.color) } as CSSProperties}
-                            title={`Filter the table to ${getCategoryLabel(row.category)}`}
+                            title={`Filter the table to ${row.label ?? getCategoryLabel(row.category)}`}
                             aria-pressed={rowSelected}
                             onClick={() => onToggleCategoryFilter(row.category)}
                           >
-                            <span className="import-shell__totals-label-text">{getCategoryLabel(row.category)}</span>
+                            <span className="import-shell__totals-label-text">{row.label ?? getCategoryLabel(row.category)}</span>
                           </button>
                         );
                       })}
@@ -291,7 +321,7 @@ function SpendingChart({
                       />
 
                       <div className="import-shell__chart-bars">
-                        {activeSeries.map((point) => {
+                        {activeSeries.map((point, pointIndex) => {
                           const baselinePct = (chartScale.positiveMax / chartScale.totalRange) * 100;
                           const positiveSegments = point.segments.filter((segment) => segment.value > 0);
                           const negativeSegments = point.segments.filter((segment) => segment.value < 0);
@@ -372,7 +402,7 @@ function SpendingChart({
                               onFocus={(event) => anchorTooltip(event.currentTarget.getBoundingClientRect(), null)}
                               onBlur={clearTooltip}
                             >
-                              {allRects.length > 0 && (
+                              {allRects.length > 0 && !lineValues && (
                                 <span
                                   className="import-shell__bar-total"
                                   style={{ top: `${tooltipTopPct}%` }}
@@ -380,6 +410,26 @@ function SpendingChart({
                                   {wholeCurrencyFormatter.format(barTotal)}
                                 </span>
                               )}
+                              {lineValues && (() => {
+                                const yPct = (value: number) =>
+                                  ((chartScale.positiveMax - value) / chartScale.totalRange) * 100;
+                                const lineValue = lineValues[pointIndex] ?? 0;
+                                return (
+                                  <>
+                                    <div
+                                      className="import-shell__line-marker"
+                                      style={{ top: `${yPct(lineValue)}%` }}
+                                      aria-hidden="true"
+                                    />
+                                    <span
+                                      className="import-shell__line-value"
+                                      style={{ top: `${yPct(lineValue)}%` }}
+                                    >
+                                      {wholeCurrencyFormatter.format(lineValue)}
+                                    </span>
+                                  </>
+                                );
+                              })()}
                               {allRects.map(({ segment, topPct, heightPct, borderRadius }) => {
                                 const segmentSelected = isSelected && selectedBucketId === segment.bucketId;
                                 const segmentDimmed =
@@ -479,7 +529,7 @@ function SpendingChart({
                                     type="button"
                                     className={`import-shell__totals-cell ${columnSelected ? "import-shell__totals-cell--column" : ""} ${cellSelected ? "import-shell__totals-cell--selected" : ""}`}
                                     style={{ flex: `1 0 ${COLUMN_BASIS_BY_RANGE[chartRange]}px` }}
-                                    aria-label={`Filter the table to ${point.label} ${getCategoryLabel(row.category)}: ${currencyFormatter.format(value)}`}
+                                    aria-label={`Filter the table to ${point.label} ${row.label ?? getCategoryLabel(row.category)}: ${currencyFormatter.format(value)}`}
                                     onClick={() => onToggleSegment(point.key, row.category)}
                                   >
                                     {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
@@ -542,11 +592,15 @@ function SpendingChart({
                   </div>
                 );
               }
-              const total = tooltipAnchor.point.segments.reduce((sum, s) => sum + s.value, 0);
+              const pointIndex = activeSeries.findIndex((p) => p.key === tooltipAnchor.point.key);
+              const total =
+                lineValues && pointIndex >= 0
+                  ? (lineValues[pointIndex] ?? 0)
+                  : tooltipAnchor.point.segments.reduce((sum, s) => sum + s.value, 0);
               return (
                 <div className="import-shell__tooltip-row">
                   <strong>{currencyFormatter.format(total)}</strong>
-                  <span>Total</span>
+                  <span>{lineValues ? lineLabel : "Total"}</span>
                 </div>
               );
             })()}

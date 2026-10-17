@@ -41,7 +41,7 @@ function previewAmount(cell: string, flip: boolean): string {
 }
 
 type CustomImportPanelProps = {
-  // Amounts arrive already normalized: spending is positive, whatever sign the file used.
+  // Amounts arrive already normalized: income is positive and spending negative, whatever sign the file used.
   onImport: (bankName: string, fileName: string, transactions: ImportedTransaction[]) => Promise<boolean>;
   knownCategories: KnownCategory[];
   bankRecords: BankRecord[];
@@ -225,10 +225,11 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
       return;
     }
 
-    // The app stores spending as positive; a file that lists expenses as negatives is flipped.
+    // The app stores income as positive and spending as negative; a file that lists expenses as
+    // positives is flipped.
     const transactions = expensesNegative
-      ? built.map((transaction) => ({ ...transaction, amount: 0 - transaction.amount }))
-      : built;
+      ? built
+      : built.map((transaction) => ({ ...transaction, amount: 0 - transaction.amount }));
 
     setIsImporting(true);
     try {
@@ -304,7 +305,7 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
                     {parsed.headers.map((_, columnIndex) => (
                       <td key={columnIndex}>
                         {columnIndex === mapping.amountIndex
-                          ? previewAmount(row[columnIndex] ?? "", expensesNegative)
+                          ? previewAmount(row[columnIndex] ?? "", !expensesNegative)
                           : (row[columnIndex] ?? "")}
                       </td>
                     ))}

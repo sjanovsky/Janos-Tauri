@@ -3,17 +3,19 @@ import SpendingPage from "./spending/SpendingPage";
 import IncomePage from "./income/IncomePage";
 import NetWorthPage from "./networth/NetWorthPage";
 import TaxesPage from "./taxes/TaxesPage";
+import CashFlowPage from "./cashflow/CashFlowPage";
 import SankeyPage from "./sankey/SankeyPage";
 import UploadPage from "./upload/UploadPage";
 import "./spending/BankImportPage.css";
 
 type View =
-  "income" | "paychecks" | "spending" | "networth" | "taxes" | "sankey" | "upload";
+  "income" | "paychecks" | "spending" | "cashflow" | "networth" | "taxes" | "sankey" | "upload";
 
 const TABS: { id: View; label: string }[] = [
   { id: "sankey", label: "Overview" },
   { id: "income", label: "Income" },
   { id: "spending", label: "Spending" },
+  { id: "cashflow", label: "Cash Flow" },
   { id: "taxes", label: "Taxes" },
   { id: "networth", label: "Net Worth" },
 ];
@@ -62,6 +64,7 @@ function AppShell() {
         {view === "income" && <IncomePage view="income" />}
         {view === "paychecks" && <IncomePage view="paychecks" />}
         {view === "spending" && <SpendingPage />}
+        {view === "cashflow" && <CashFlowPage />}
         {view === "networth" && <NetWorthPage />}
         {view === "taxes" && <TaxesPage />}
         {view === "sankey" && <SankeyPage />}

@@ -208,8 +208,8 @@ function IncomePage({ view = "income" }: IncomePageProps) {
     [uploads],
   );
   const transactions = useMemo(
-    () => toIncomeTransactions(allTransactions, incomeCategoryIds, bankRecords),
-    [allTransactions, incomeCategoryIds, bankRecords],
+    () => toIncomeTransactions(allTransactions, incomeCategoryIds),
+    [allTransactions, incomeCategoryIds],
   );
 
   // Each income category (paychecks included) is one stack segment and one totals row.

@@ -1,3 +1,4 @@
+mod cashflow;
 mod db;
 mod income;
 mod networth;
@@ -141,6 +142,11 @@ pub fn run() {
             income::delete_paycheck_item,
             income::set_paycheck_bucket_positions,
             income::set_paycheck_item_layout,
+            cashflow::get_cashflow_data,
+            cashflow::upsert_cashflow_group,
+            cashflow::delete_cashflow_group,
+            cashflow::set_cashflow_group_positions,
+            cashflow::set_cashflow_member,
             sankey::get_sankey_data,
             sankey::upsert_sankey_bucket,
             sankey::set_sankey_bucket_positions,

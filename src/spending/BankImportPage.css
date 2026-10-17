@@ -846,6 +846,32 @@
   pointer-events: none;
 }
 
+/* A horizontal line across the column at the line value, not joined to neighboring columns. */
+.import-shell__line-marker {
+  position: absolute;
+  left: 5%;
+  width: 90%;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: var(--chart-secondary);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.import-shell__line-value {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, calc(-100% - 8px));
+  color: var(--chart-secondary);
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3;
+}
+
 .import-shell__totals-labels {
   display: flex;
   flex-direction: column;
@@ -3375,4 +3401,18 @@ textarea.bucket-row__name {
   border: none;
   background: none;
   cursor: pointer;
+}
+
+/* Open/closed chevron on a collapsible total row's label (a Cash Flow group's buckets). */
+.import-shell__totals-chevron {
+  display: inline-block;
+  width: 1rem;
+  flex-shrink: 0;
+  color: #6b7280;
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+
+.import-shell__totals-chevron--open {
+  transform: rotate(90deg);
 }
