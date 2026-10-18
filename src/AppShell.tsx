@@ -7,10 +7,12 @@ import CashFlowPage from "./cashflow/CashFlowPage";
 import SankeyPage from "./sankey/SankeyPage";
 import UploadPage from "./upload/UploadPage";
 import SettingsPage from "./settings/SettingsPage";
+import ForecastingPage from "./forecasting/ForecastingPage";
+import PlanningPage from "./planning/PlanningPage";
 import "./spending/BankImportPage.css";
 
 type View =
-  "income" | "paychecks" | "spending" | "cashflow" | "networth" | "taxes" | "sankey" | "upload" | "settings";
+  "income" | "paychecks" | "spending" | "cashflow" | "networth" | "planning" | "forecasting" | "taxes" | "sankey" | "upload" | "settings";
 
 const TABS: { id: View; label: string }[] = [
   { id: "sankey", label: "Overview" },
@@ -19,6 +21,8 @@ const TABS: { id: View; label: string }[] = [
   { id: "cashflow", label: "Cash Flow" },
   { id: "taxes", label: "Taxes" },
   { id: "networth", label: "Net Worth" },
+  { id: "planning", label: "Planning" },
+  { id: "forecasting", label: "Forecasting" },
 ];
 
 function GearIcon() {
@@ -89,6 +93,8 @@ function AppShell() {
         {view === "spending" && <SpendingPage />}
         {view === "cashflow" && <CashFlowPage />}
         {view === "networth" && <NetWorthPage />}
+        {view === "planning" && <PlanningPage />}
+        {view === "forecasting" && <ForecastingPage />}
         {view === "taxes" && <TaxesPage />}
         {view === "sankey" && <SankeyPage />}
         {view === "upload" && <UploadPage />}

@@ -37,7 +37,8 @@ pub fn get_paychecks_data(state: State<DbState>) -> Result<PaychecksData, String
 fn load(conn: &Connection) -> rusqlite::Result<PaychecksData> {
     let mut paychecks = conn
         .prepare(
-            "SELECT p.id, p.name, p.deposit_pattern, COALESCE(c.color, '#4f46e5'), p.position
+            "SELECT p.id, p.name, p.deposit_pattern, COALESCE(c.color, '#4f46e5'), p.position,
+                    p.paychecks_per_year, p.extra_income
              FROM paychecks p LEFT JOIN categories c ON c.id = p.id
              ORDER BY p.position, p.rowid",
         )?
@@ -48,6 +49,8 @@ fn load(conn: &Connection) -> rusqlite::Result<PaychecksData> {
                 deposit_pattern: row.get(2)?,
                 color: row.get(3)?,
                 position: row.get(4)?,
+                paychecks_per_year: row.get(5)?,
+                extra_income: row.get(6)?,
                 versions: Vec::new(),
             })
         })?
@@ -134,15 +137,20 @@ pub fn upsert_paycheck(
     name: String,
     deposit_pattern: String,
     color: String,
+    paychecks_per_year: Option<i64>,
+    extra_income: Option<f64>,
 ) -> Result<(), String> {
     let mut conn = state.0.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     tx.execute(
-        "INSERT INTO paychecks (id, person, name, deposit_pattern, position)
-         VALUES (?1, '', ?2, ?3, COALESCE((SELECT MAX(position) + 1 FROM paychecks), 0))
+        "INSERT INTO paychecks (id, person, name, deposit_pattern, position, paychecks_per_year, extra_income)
+         VALUES (?1, '', ?2, ?3, COALESCE((SELECT MAX(position) + 1 FROM paychecks), 0),
+                 COALESCE(?4, 26), COALESCE(?5, 0))
          ON CONFLICT(id) DO UPDATE SET name = excluded.name,
-                                       deposit_pattern = excluded.deposit_pattern",
-        params![id, name, deposit_pattern],
+                                       deposit_pattern = excluded.deposit_pattern,
+                                       paychecks_per_year = COALESCE(?4, paychecks_per_year),
+                                       extra_income = COALESCE(?5, extra_income)",
+        params![id, name, deposit_pattern, paychecks_per_year, extra_income],
     )
     .map_err(|e| e.to_string())?;
     tx.execute(

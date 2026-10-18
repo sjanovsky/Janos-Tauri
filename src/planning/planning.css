@@ -1,0 +1,268 @@
+/* Planning page: the plan on the left half, projected net worth on the right. Indigo (#4f46e5) is
+   the app accent; overridden fields use it so typed-over values stand out from pulled-in ones. */
+.planning-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+
+.planning-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  min-height: 0;
+}
+
+.planning-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;
+  padding-bottom: 1rem;
+  overflow-y: auto;
+}
+
+@media (max-width: 1100px) {
+  .planning-body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+  .planning-column {
+    overflow: visible;
+  }
+}
+
+/* Same card as the Taxes page. */
+.planning-card {
+  flex-shrink: 0;
+  padding: 1rem 1.2rem 1.1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 8px 24px rgba(17, 24, 39, 0.04);
+}
+
+.planning-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.planning-heading {
+  margin-bottom: 0.9rem;
+}
+
+.planning-heading h2 {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+}
+
+.planning-heading p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.planning-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.planning-table th,
+.planning-table td {
+  padding: 0.18rem 0.5rem;
+  text-align: right;
+  vertical-align: middle;
+}
+
+.planning-table tbody th[scope="row"] {
+  text-align: left;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.planning-colhead {
+  padding-bottom: 0.4rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 1px solid #d6d4cf;
+}
+
+.planning-dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+}
+
+.planning-section th {
+  padding-top: 0.7rem;
+  color: #6b6a66;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.planning-sum th,
+.planning-sum td {
+  border-top: 1px solid #ecebe8;
+}
+
+.planning-sum th,
+.planning-sum td {
+  font-weight: 600;
+}
+
+.planning-muted td,
+.planning-muted th {
+  color: #6b6a66;
+}
+
+.planning-hint td {
+  padding-top: 0;
+  padding-bottom: 0.2rem;
+  color: #6b6a66;
+  font-size: 0.7rem;
+}
+
+.planning-hint th {
+  padding: 0;
+}
+
+.planning-hint button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #4f46e5;
+  font: inherit;
+  cursor: pointer;
+}
+
+.planning-hint button:hover {
+  text-decoration: underline;
+}
+
+.planning-total {
+  background: #f6f5f3;
+}
+
+.planning-negative {
+  color: #b42318;
+}
+
+/* Matches the Taxes page's number fields. */
+.planning-field {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 8.5rem;
+  margin-left: auto;
+  padding: 0 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: white;
+}
+
+.planning-field:focus-within {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.planning-field--overridden {
+  border-color: #4f46e5;
+}
+
+.planning-field__prefix {
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
+
+/* Beat the global input styles (padding, shadow, radius) which are meant for standalone inputs. */
+.planning-field .planning-field__input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+/* --- Projected net worth --- */
+.planning-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.planning-chart--empty {
+  color: #52514e;
+  font-size: 0.85rem;
+}
+
+.planning-chart__axis {
+  stroke: #c3c2b7;
+}
+
+.planning-chart__label,
+.planning-chart__value {
+  fill: #52514e;
+  font-size: 11px;
+}
+
+.planning-chart__bar {
+  fill: #4f46e5;
+}
+
+.planning-chart__bar--projected {
+  fill: #a5b4fc;
+}
+
+.planning-chart__range line {
+  stroke: #d9480f;
+  stroke-width: 1.5;
+}
+
+.planning-link {
+  margin-left: 0.6rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #4f46e5;
+  font: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.planning-link:hover {
+  text-decoration: underline;
+}
+
+.planning-choose td {
+  padding: 0.2rem 0.5rem 0.4rem;
+  text-align: left;
+  color: #52514e;
+  font-size: 0.78rem;
+}
+
+.planning-choose label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.75rem;
+}

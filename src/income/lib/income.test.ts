@@ -49,6 +49,8 @@ const paycheck: PaycheckRecord = {
   id: "rachel",
   name: "Rachel Salary",
   depositPattern: "ACME",
+  paychecksPerYear: 26,
+  extraIncome: 0,
   color: "#000",
   position: 0,
   versions: [

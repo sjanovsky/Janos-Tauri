@@ -1,0 +1,300 @@
+/* Forecasting page. Indigo (#4f46e5) matches the app accent; the forecast zone uses a warm tint so
+   "projected" reads as different from "real" in both the chart and the table. */
+.forecast-page {
+  overflow-y: auto;
+  gap: 1.25rem;
+}
+
+.forecast-page > * {
+  flex-shrink: 0;
+}
+
+.forecast-chart {
+  position: relative;
+  margin-top: 0.75rem;
+}
+
+.forecast-scroll {
+  overflow-x: auto;
+}
+
+.forecast-chart svg {
+  display: block;
+}
+
+.forecast-legend {
+  padding-left: 0.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 0.25rem;
+  color: #52514e;
+  font-size: 0.8rem;
+}
+
+.forecast-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.forecast-key {
+  display: inline-block;
+  width: 1.4rem;
+  height: 0;
+  border-top: 3px solid #4f46e5;
+}
+
+.forecast-key--mid {
+  border-top: 2px dashed #d9480f;
+}
+
+.forecast-key--band {
+  height: 0.7rem;
+  border: 0;
+  border-radius: 2px;
+  background: rgba(217, 72, 15, 0.22);
+}
+
+.forecast-zone {
+  fill: #fff4e6;
+}
+
+.forecast-zone-label {
+  fill: #868e96;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.forecast-grid {
+  stroke: #e1e0d9;
+}
+
+.forecast-baseline {
+  stroke: #c3c2b7;
+  stroke-width: 1.5;
+}
+
+.forecast-axis {
+  fill: #52514e;
+  font-size: 11px;
+}
+
+.forecast-divider {
+  stroke: #868e96;
+  stroke-dasharray: 4 4;
+}
+
+.forecast-hover-line {
+  stroke: #adb5bd;
+}
+
+.forecast-band {
+  fill: rgba(217, 72, 15, 0.18);
+}
+
+.forecast-line {
+  fill: none;
+  stroke-linejoin: round;
+}
+
+.forecast-line--actual {
+  stroke: #4f46e5;
+  stroke-width: 3;
+}
+
+.forecast-line--mid {
+  stroke: #d9480f;
+  stroke-width: 2.5;
+  stroke-dasharray: 7 5;
+}
+
+.forecast-line--edge {
+  stroke: rgba(217, 72, 15, 0.45);
+  stroke-width: 1;
+}
+
+.forecast-dot {
+  fill: #4f46e5;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.forecast-dot--mid {
+  fill: #d9480f;
+}
+
+.forecast-tooltip {
+  position: absolute;
+  top: 2.5rem;
+  transform: translateX(-50%);
+  min-width: 9rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.forecast-tooltip__title {
+  margin-bottom: 0.2rem;
+  font-weight: 700;
+}
+
+.forecast-tooltip__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* --- Table --- */
+
+.forecast-table-wrap {
+  margin-top: 0.5rem;
+}
+
+.forecast-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.forecast-table th,
+.forecast-table td {
+  padding: 0.3rem 0.65rem;
+  border-bottom: 1px solid #eceae3;
+  white-space: nowrap;
+}
+
+.forecast-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #fff;
+  text-align: left;
+  font-weight: 500;
+}
+
+.forecast-cell {
+  text-align: right;
+}
+
+.forecast-group {
+  text-align: center;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #4338ca;
+  border-bottom: 2px solid #4f46e5 !important;
+}
+
+.forecast-group--proj {
+  color: #c2410c;
+  border-bottom-color: #d9480f !important;
+}
+
+.forecast-cell--proj {
+  background: #fff8f0;
+  color: #7c2d12;
+}
+
+/* Heavier line where real data ends and projections begin. */
+.forecast-table .forecast-cell--edge {
+  border-left: 2px dashed #d9480f;
+}
+
+.forecast-row--bucket th,
+.forecast-row--bucket td {
+  font-weight: 700;
+  background-color: #f8f7f3;
+}
+
+.forecast-row--bucket .forecast-cell--proj {
+  background: #fff1e0;
+}
+
+.forecast-row--net th,
+.forecast-row--net td {
+  font-weight: 700;
+  border-top: 2px solid #c3c2b7;
+}
+
+.forecast-row--case th,
+.forecast-row--case td {
+  color: #6b7280;
+  font-size: 0.78rem;
+}
+
+.forecast-swatch {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-right: 0.5rem;
+  border-radius: 2px;
+}
+
+/* --- Assumptions --- */
+
+.forecast-years {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.forecast-input {
+  width: 5.5rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+.forecast-rate {
+  padding-block: 0.15rem !important;
+}
+
+.forecast-rate .forecast-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* No spinner buttons on the number fields. */
+.forecast-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.forecast-input::-webkit-outer-spin-button,
+.forecast-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* The unit sits inside the field's right edge. */
+.forecast-input-wrap {
+  position: relative;
+  display: block;
+}
+
+.forecast-input-wrap .forecast-input {
+  padding-right: 1.4rem;
+}
+
+.forecast-input-wrap::after {
+  content: attr(data-suffix);
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6b7280;
+  font-size: 0.85rem;
+  pointer-events: none;
+}

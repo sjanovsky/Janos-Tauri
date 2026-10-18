@@ -15,6 +15,8 @@ export type PaycheckVersionRecord = {
 
 // A paycheck. `id` is also the id of the income category its deposits are filed under; its numbers
 // live in `versions`.
+export const DEFAULT_PAYCHECKS_PER_YEAR = 26;
+
 export type PaycheckRecord = {
   id: string;
   name: string;
@@ -23,6 +25,9 @@ export type PaycheckRecord = {
   depositPattern: string;
   color: string;
   position: number;
+  // How many are paid in a year, and bonuses/commission on top of them per year (the Planning page).
+  paychecksPerYear: number;
+  extraIncome: number;
   versions: PaycheckVersionRecord[];
 };
 

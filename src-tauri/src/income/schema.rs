@@ -95,6 +95,13 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
          DROP TABLE IF EXISTS income_rules;",
     )?;
 
+    if !column_exists(conn, "paychecks", "paychecks_per_year")? {
+        conn.execute("ALTER TABLE paychecks ADD COLUMN paychecks_per_year INTEGER NOT NULL DEFAULT 26", [])?;
+    }
+    if !column_exists(conn, "paychecks", "extra_income")? {
+        conn.execute("ALTER TABLE paychecks ADD COLUMN extra_income REAL NOT NULL DEFAULT 0", [])?;
+    }
+
     if !column_exists(conn, "paychecks", "gross")? {
         conn.execute("ALTER TABLE paychecks ADD COLUMN gross REAL NOT NULL DEFAULT 0", [])?;
     }

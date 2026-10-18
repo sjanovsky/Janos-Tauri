@@ -31,6 +31,8 @@ const input = (transactions: ImportedTransaction[]): CashFlowInput => ({
       id: "pay",
       name: "Pay",
       depositPattern: "",
+      paychecksPerYear: 26,
+      extraIncome: 0,
       color: "#000",
       position: 0,
       versions: [

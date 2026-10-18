@@ -15,5 +15,6 @@ pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
     crate::income::schema::migrate(conn)?;
     crate::sankey::schema::migrate(conn)?;
     crate::cashflow::schema::migrate(conn)?;
+    crate::planning::schema::migrate(conn)?;
     Ok(())
 }

@@ -32,7 +32,12 @@ type PaychecksTabProps = {
   onAddPaycheck: (name: string) => string;
   onUpdatePaycheck: (
     id: string,
-    patch: Partial<Pick<PaycheckRecord, "name" | "depositPattern" | "color">>,
+    patch: Partial<
+      Pick<
+        PaycheckRecord,
+        "name" | "depositPattern" | "color" | "paychecksPerYear" | "extraIncome"
+      >
+    >,
   ) => void;
   onDeletePaycheck: (id: string) => void;
   onSetValue: (versionId: string, itemId: string, amount: number) => void;

@@ -2,6 +2,7 @@ mod cashflow;
 mod db;
 mod income;
 mod networth;
+mod planning;
 mod sankey;
 mod spending;
 mod taxes;
@@ -142,6 +143,9 @@ pub fn run() {
             income::delete_paycheck_item,
             income::set_paycheck_bucket_positions,
             income::set_paycheck_item_layout,
+            planning::get_planning_settings,
+            planning::set_planning_setting,
+            planning::delete_planning_setting,
             cashflow::get_cashflow_data,
             cashflow::upsert_cashflow_group,
             cashflow::delete_cashflow_group,

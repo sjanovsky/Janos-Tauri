@@ -34,6 +34,10 @@ pub struct PaycheckRecord {
     pub deposit_pattern: String,
     pub color: String,
     pub position: i64,
+    /// How many of these paychecks are paid in a year (26 biweekly, 24 semi-monthly, ...).
+    pub paychecks_per_year: i64,
+    /// Bonuses, commission and other pay on top of the paychecks, per year.
+    pub extra_income: f64,
     pub versions: Vec<PaycheckVersionRecord>,
 }
 

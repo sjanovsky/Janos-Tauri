@@ -29,7 +29,12 @@ type LineItemsManagerProps = {
   onAddPaycheck: (name: string) => void;
   onUpdatePaycheck: (
     id: string,
-    patch: Partial<Pick<PaycheckRecord, "name" | "depositPattern" | "color">>,
+    patch: Partial<
+      Pick<
+        PaycheckRecord,
+        "name" | "depositPattern" | "color" | "paychecksPerYear" | "extraIncome"
+      >
+    >,
   ) => void;
   onDeletePaycheck: (id: string) => void;
   buckets: PaycheckBucketRecord[];
@@ -592,13 +597,15 @@ function LineItemsManager({
                   <tr>
                     <th>Paycheck</th>
                     <th>Transaction description contains</th>
+                    <th>Paychecks per year</th>
+                    <th>Extra income per year</th>
                     <th aria-label="Delete" />
                   </tr>
                 </thead>
                 <tbody>
                   {paychecks.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="income-settings__empty">
+                      <td colSpan={5} className="income-settings__empty">
                         No paychecks yet.
                       </td>
                     </tr>
@@ -639,6 +646,47 @@ function LineItemsManager({
                             const depositPattern = event.target.value.trim();
                             if (depositPattern !== paycheck.depositPattern) {
                               onUpdatePaycheck(paycheck.id, { depositPattern });
+                            }
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="income-settings__text"
+                          type="number"
+                          min={1}
+                          step={1}
+                          aria-label={`${paycheck.name} paychecks per year`}
+                          defaultValue={paycheck.paychecksPerYear}
+                          onBlur={(event) => {
+                            const count = Math.round(Number(event.target.value));
+                            if (Number.isFinite(count) && count >= 1) {
+                              if (count !== paycheck.paychecksPerYear) {
+                                onUpdatePaycheck(paycheck.id, { paychecksPerYear: count });
+                              }
+                            } else {
+                              event.target.value = String(paycheck.paychecksPerYear);
+                            }
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="income-settings__text"
+                          type="number"
+                          min={0}
+                          step="any"
+                          aria-label={`${paycheck.name} extra income per year`}
+                          placeholder="Bonus, commission"
+                          defaultValue={paycheck.extraIncome === 0 ? "" : paycheck.extraIncome}
+                          onBlur={(event) => {
+                            const amount = event.target.value === "" ? 0 : Number(event.target.value);
+                            if (Number.isFinite(amount) && amount >= 0) {
+                              if (amount !== paycheck.extraIncome) {
+                                onUpdatePaycheck(paycheck.id, { extraIncome: amount });
+                              }
+                            } else {
+                              event.target.value = paycheck.extraIncome === 0 ? "" : String(paycheck.extraIncome);
                             }
                           }}
                         />

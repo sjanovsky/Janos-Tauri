@@ -31,6 +31,7 @@ import {
 } from "../spending/lib/transactionSummary";
 import {
   UNGROUPED_ITEMS_BUCKET_ID,
+  DEFAULT_PAYCHECKS_PER_YEAR,
   bucketSegmentId,
   buildGrossBreakdown,
   checkDeposits,
@@ -823,6 +824,8 @@ function IncomePage({ view = "income" }: IncomePageProps) {
       name: paycheck.name,
       depositPattern: paycheck.depositPattern,
       color: paycheck.color,
+      paychecksPerYear: paycheck.paychecksPerYear,
+      extraIncome: paycheck.extraIncome,
     });
 
   const handleAddPaycheck = (name: string): string => {
@@ -837,6 +840,8 @@ function IncomePage({ view = "income" }: IncomePageProps) {
       depositPattern: "",
       color,
       position: paychecks.length,
+      paychecksPerYear: DEFAULT_PAYCHECKS_PER_YEAR,
+      extraIncome: 0,
       versions: [
         {
           id: `v-${id}`,
@@ -872,7 +877,12 @@ function IncomePage({ view = "income" }: IncomePageProps) {
 
   const handleUpdatePaycheck = (
     id: string,
-    patch: Partial<Pick<PaycheckRecord, "name" | "depositPattern" | "color">>,
+    patch: Partial<
+      Pick<
+        PaycheckRecord,
+        "name" | "depositPattern" | "color" | "paychecksPerYear" | "extraIncome"
+      >
+    >,
   ) => {
     const current = paychecks.find((paycheck) => paycheck.id === id);
     if (!current) {

@@ -7,6 +7,8 @@ const paycheck = {
   id: "pc1",
   name: "Stephen Salary",
   depositPattern: "",
+  paychecksPerYear: 26,
+  extraIncome: 0,
   color: "#4f46e5",
   position: 0,
   versions: [
