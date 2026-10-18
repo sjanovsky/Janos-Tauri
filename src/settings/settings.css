@@ -1,0 +1,9 @@
+.settings-page { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; }
+.settings-page > * { flex-shrink: 0; }
+.settings-page .category-manager { overflow: visible; }
+.settings-page__heading h1 { margin: 0; font-size: 1.4rem; color: #111827; }
+.settings-page__heading p { margin: 0.25rem 0 0; color: #6b7280; font-size: 0.85rem; }
+.settings-swatch { display: inline-block; margin-right: 0.5rem; }
+.settings-name { font-weight: 700; color: #111827; }
+.settings-link { border: 0; padding: 0; background: none; box-shadow: none; color: #4f46e5; font: inherit; text-decoration: underline; cursor: pointer; }
+.settings-page__heading h1 { text-align: left; }

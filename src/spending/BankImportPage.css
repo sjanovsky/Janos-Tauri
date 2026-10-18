@@ -1,3 +1,9 @@
+html,
+body,
+#root {
+  margin: 0;
+}
+
 .import-shell {
   display: flex;
   flex-direction: column;
@@ -42,12 +48,20 @@
   cursor: pointer;
 }
 
+/* Icon-only tab (the gear): match the height of the text tabs, whose line height is 24px. */
+.shell-tab svg {
+  display: block;
+  margin: 4px 0;
+}
+
 .shell-tab:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #f9fafb;
 }
 
-.shell-tab--active {
+.shell-tab--active,
+.shell-tab--active:hover,
+.shell-tab--active:active {
   background: #f5f7ff;
   color: #111827;
 }
@@ -895,7 +909,7 @@
 /* Base row (shared by category line items, bucket totals, and the Net row). Each bucket's
    section is color-coded with its bucket color via the inline `--bucket` custom property:
    categories are light line items, and the bucket total sits at the bottom, bolder and with
-   a stronger tint. Net stays neutral. */
+   a same tint as line items. Net stays neutral. */
 .import-shell__totals-label {
   display: flex;
   align-items: center;
@@ -938,13 +952,13 @@
   margin-top: 0.5rem;
 }
 
-/* Bucket total sits at the bottom of its section: bold, stronger tint. Straight dividing
+/* Bucket total sits at the bottom of its section: bold, same tint as line items. Straight dividing
    lines cap the band top and bottom so the section reads as a framed block. */
 .import-shell__totals-label--bucket {
   box-sizing: border-box;
   width: calc(100% + var(--chart-grid-gap));
   padding-left: 0.6rem;
-  background: color-mix(in srgb, var(--bucket, #d1d5db) 18%, white);
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 10%, white);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white),
     inset 0 -1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white);
   color: #111827;
@@ -952,7 +966,7 @@
 }
 
 .import-shell__totals-label--bucket:hover {
-  background: color-mix(in srgb, var(--bucket, #d1d5db) 24%, white);
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 16%, white);
 }
 
 .import-shell__totals-label--selected {
@@ -996,9 +1010,9 @@
   margin-top: 0.5rem;
 }
 
-/* Bucket total value row: stronger tint, straight dividers capping the band top and bottom. */
+/* Bucket total value row: same tint as line items, straight dividers capping the band top and bottom. */
 .import-shell__totals-row--bucket {
-  background: color-mix(in srgb, var(--bucket, #d1d5db) 18%, white);
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 10%, white);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white),
     inset 0 -1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white);
 }
@@ -1049,7 +1063,7 @@
 }
 
 .import-shell__totals-cell--bucket:hover {
-  --totals-cell-hover: color-mix(in srgb, var(--bucket, #d1d5db) 24%, white);
+  --totals-cell-hover: color-mix(in srgb, var(--bucket, #d1d5db) 16%, white);
 }
 
 .import-shell__totals-cell--column {
@@ -2236,7 +2250,8 @@ textarea.bucket-row__name {
 }
 
 .manage-modal__tab--active,
-.manage-modal__tab--active:hover {
+.manage-modal__tab--active:hover,
+.manage-modal__tab--active:active {
   background: white;
   color: #111827;
 }
@@ -2637,7 +2652,7 @@ textarea.bucket-row__name {
 }
 
 .networth-layout .import-shell__totals-label--bucket:hover {
-  background: color-mix(in srgb, var(--bucket, #d1d5db) 18%, white);
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 10%, white);
 }
 
 /* A balance cell holds an editable input that fills it and reads like plain text until focused. */

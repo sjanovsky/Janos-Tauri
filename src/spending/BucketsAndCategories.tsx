@@ -501,7 +501,7 @@ function BucketsAndCategories({
   return (
     <section className="category-manager">
       <div className="category-manager__heading">
-        <h2>Buckets &amp; categories</h2>
+        <h2>Spending Buckets</h2>
         <p>
           Drag a category into a bucket to group it. Drop it in “Exclude” to leave it out of
           spending, or “Ungrouped” to pull it back out.

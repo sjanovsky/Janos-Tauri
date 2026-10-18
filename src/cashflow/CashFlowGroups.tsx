@@ -170,7 +170,7 @@ function CashFlowGroups({
   return (
     <section className="category-manager">
       <div className="category-manager__heading">
-        <h2>Cash flow groups</h2>
+        <h2>Cash Flow Groups</h2>
         <p>
           Drag a bucket into a group to roll it up on the Cash Flow chart. Drag “Leftover” into one
           (usually Savings) to count what's left each month as that group's money; leave it out and it

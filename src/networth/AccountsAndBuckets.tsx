@@ -459,7 +459,7 @@ function AccountsAndBuckets({
   return (
     <section className="category-manager">
       <div className="category-manager__heading">
-        <h2>Accounts &amp; buckets</h2>
+        <h2>Banks Accounts</h2>
         <p>
           Drag an account into a bucket to group it, or into “Ungrouped” to pull it back out.
           Drag a bucket by its handle to reorder, and recolor it with its swatch.

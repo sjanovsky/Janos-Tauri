@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { computeDivergingScale } from "../spending/lib/chartScale";
 import NetWorthChart from "./NetWorthChart";
+import { useNetWorthAccounts } from "./lib/useNetWorthAccounts";
 import NetWorthManageModal, { type NetWorthManageTab } from "./NetWorthManageModal";
 import { type ImportPayload } from "./NetWorthImportModal";
 import {
@@ -10,7 +11,6 @@ import {
   buildNetWorthYearlyView,
   currentMonth,
   formatMonthAxis,
-  nextBucketColor,
   sortedUniqueMonths,
   type AccountRecord,
   type BalanceRecord,
@@ -161,148 +161,18 @@ function NetWorthPage() {
 
   const hasData = balances.length > 0;
 
-  // --- Buckets ---
-
-  const handleAddBucket = (name: string) => {
-    const previous = buckets;
-    const id = crypto.randomUUID();
-    const color = nextBucketColor(buckets.length);
-    const position = buckets.reduce((max, bucket) => Math.max(max, bucket.position), -1) + 1;
-    setBuckets((current) => [...current, { id, name, color, position }]);
-
-    invoke("upsert_networth_bucket", { id, name, color }).catch((error) => {
-      console.error("Failed to save the new bucket", error);
-      setDbError(DB_ERROR);
-      setBuckets(previous);
-    });
-  };
-
-  const handleRenameBucket = (id: string, name: string) => {
-    const previous = buckets;
-    const color = buckets.find((bucket) => bucket.id === id)?.color ?? nextBucketColor(buckets.length);
-    setBuckets((current) => current.map((bucket) => (bucket.id === id ? { ...bucket, name } : bucket)));
-
-    invoke("upsert_networth_bucket", { id, name, color }).catch((error) => {
-      console.error("Failed to rename the bucket", error);
-      setDbError(DB_ERROR);
-      setBuckets(previous);
-    });
-  };
-
-  const handleSetBucketColor = (id: string, color: string) => {
-    const previous = buckets;
-    const name = buckets.find((bucket) => bucket.id === id)?.name;
-    if (name === undefined) {
-      return;
-    }
-    setBuckets((current) => current.map((bucket) => (bucket.id === id ? { ...bucket, color } : bucket)));
-
-    invoke("upsert_networth_bucket", { id, name, color }).catch((error) => {
-      console.error("Failed to save the bucket color", error);
-      setDbError(DB_ERROR);
-      setBuckets(previous);
-    });
-  };
-
-  const handleDeleteBucket = (id: string) => {
-    const previousBuckets = buckets;
-    const previousAccounts = accounts;
-    setBuckets((current) => current.filter((bucket) => bucket.id !== id));
-    // The accounts stay; they just fall back to the Ungrouped tray (matching the DB's SET NULL).
-    setAccounts((current) =>
-      current.map((account) => (account.bucketId === id ? { ...account, bucketId: null } : account)),
-    );
-
-    invoke("delete_networth_bucket", { id }).catch((error) => {
-      console.error("Failed to delete the bucket", error);
-      setDbError(DB_ERROR);
-      setBuckets(previousBuckets);
-      setAccounts(previousAccounts);
-    });
-  };
-
-  const handleReorderBuckets = (orderedIds: string[]) => {
-    const previous = buckets;
-    const positionById = new Map(orderedIds.map((id, index) => [id, index]));
-    setBuckets((current) =>
-      current.map((bucket) =>
-        positionById.has(bucket.id) ? { ...bucket, position: positionById.get(bucket.id)! } : bucket,
-      ),
-    );
-
-    invoke("set_networth_bucket_positions", { ids: orderedIds }).catch((error) => {
-      console.error("Failed to save the bucket order", error);
-      setDbError(DB_ERROR);
-      setBuckets(previous);
-    });
-  };
-
-  // --- Accounts ---
-
-  const handleAddAccount = (name: string) => {
-    const previous = accounts;
-    const id = crypto.randomUUID();
-    const position = accounts.reduce((max, account) => Math.max(max, account.position), -1) + 1;
-    setAccounts((current) => [...current, { id, name, bucketId: null, position }]);
-
-    invoke("upsert_networth_account", { id, name }).catch((error) => {
-      console.error("Failed to save the new account", error);
-      setDbError(DB_ERROR);
-      setAccounts(previous);
-    });
-  };
-
-  const handleRenameAccount = (id: string, name: string) => {
-    const previous = accounts;
-    setAccounts((current) => current.map((account) => (account.id === id ? { ...account, name } : account)));
-
-    invoke("upsert_networth_account", { id, name }).catch((error) => {
-      console.error("Failed to rename the account", error);
-      setDbError(DB_ERROR);
-      setAccounts(previous);
-    });
-  };
-
-  const handleDeleteAccount = (id: string) => {
-    const previousAccounts = accounts;
-    const previousBalances = balances;
-    setAccounts((current) => current.filter((account) => account.id !== id));
-    setBalances((current) => current.filter((balance) => balance.accountId !== id));
-
-    invoke("delete_networth_account", { id }).catch((error) => {
-      console.error("Failed to delete the account", error);
-      setDbError(DB_ERROR);
-      setAccounts(previousAccounts);
-      setBalances(previousBalances);
-    });
-  };
-
-  // Move an account into a bucket (or back to Ungrouped), optionally reordering that bucket.
-  const handlePlaceAccount = (accountId: string, bucketId: string | null, orderedBucketIds?: string[]) => {
-    const previous = accounts;
-    const existing = accounts.find((account) => account.id === accountId);
-    const name = existing?.name ?? "";
-    const positionById = orderedBucketIds ? new Map(orderedBucketIds.map((id, index) => [id, index])) : null;
-
-    setAccounts((current) => {
-      const withMoved = current.map((account) =>
-        account.id === accountId ? { ...account, bucketId } : account,
-      );
-      return positionById
-        ? withMoved.map((account) =>
-            positionById.has(account.id) ? { ...account, position: positionById.get(account.id)! } : account,
-          )
-        : withMoved;
-    });
-
-    invoke("set_networth_account_placement", { id: accountId, name, bucketId })
-      .then(() => (orderedBucketIds ? invoke("set_networth_account_positions", { ids: orderedBucketIds }) : undefined))
-      .catch((error) => {
-        console.error("Failed to save the account placement", error);
-        setDbError(DB_ERROR);
-        setAccounts(previous);
-      });
-  };
+  const accountsProps = useNetWorthAccounts({
+    buckets,
+    setBuckets,
+    accounts,
+    setAccounts,
+    onError: () => setDbError(DB_ERROR),
+    onAccountRemoved: (id) => {
+      const previous = balances;
+      setBalances((current) => current.filter((balance) => balance.accountId !== id));
+      return () => setBalances(previous);
+    },
+  });
 
   // --- Balances ---
 
@@ -459,19 +329,7 @@ function NetWorthPage() {
             onAddRange: handleAddMonthRange,
             onDeleteMonth: handleDeleteMonth,
           }}
-          accounts={{
-            accounts,
-            buckets,
-            onAddAccount: handleAddAccount,
-            onRenameAccount: handleRenameAccount,
-            onDeleteAccount: handleDeleteAccount,
-            onAddBucket: handleAddBucket,
-            onRenameBucket: handleRenameBucket,
-            onSetBucketColor: handleSetBucketColor,
-            onDeleteBucket: handleDeleteBucket,
-            onReorderBuckets: handleReorderBuckets,
-            onPlaceAccount: handlePlaceAccount,
-          }}
+          accounts={accountsProps}
         />
       )}
     </>

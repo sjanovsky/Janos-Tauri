@@ -35,8 +35,6 @@ import {
   buildGrossBreakdown,
   checkDeposits,
   itemSegmentId,
-  moveBucket,
-  moveItem,
   netSegmentId,
   resolveVersion,
   toIncomeTransactions,
@@ -47,6 +45,7 @@ import {
   type PaychecksData,
 } from "./lib/income";
 import IncomeSettingsModal from "./IncomeSettingsModal";
+import { usePaycheckLineItems } from "./lib/usePaycheckLineItems";
 import PaychecksTab from "./PaychecksTab";
 
 const DB_ERROR =
@@ -1049,116 +1048,34 @@ function IncomePage({ view = "income" }: IncomePageProps) {
     );
   };
 
-  const handleSaveBucket = (
-    bucket: Pick<PaycheckBucketRecord, "id" | "name" | "color">,
-  ) => {
-    const previous = paycheckBuckets;
-    setPaycheckBuckets((all) =>
-      all.some((item) => item.id === bucket.id)
-        ? all.map((item) =>
-            item.id === bucket.id ? { ...item, ...bucket } : item,
-          )
-        : [...all, { ...bucket, position: all.length }],
-    );
-    invoke("upsert_paycheck_bucket", {
-      id: bucket.id,
-      name: bucket.name,
-      color: bucket.color,
-    }).catch(failSave("that bucket", () => setPaycheckBuckets(previous)));
-  };
-
-  const handleDeleteBucket = (id: string) => {
-    const previousBuckets = paycheckBuckets;
-    const previousItems = paycheckItems;
-    setPaycheckBuckets((all) => all.filter((bucket) => bucket.id !== id));
-    setPaycheckItems((all) =>
-      all.map((item) =>
-        item.bucketId === id ? { ...item, bucketId: null } : item,
-      ),
-    );
-    invoke("delete_paycheck_bucket", { id }).catch(
-      failSave("that change", () => {
-        setPaycheckBuckets(previousBuckets);
-        setPaycheckItems(previousItems);
-      }),
-    );
-  };
-
-  const handleSaveItem = (
-    item: Pick<PaycheckItemRecord, "id" | "label" | "bucketId">,
-  ) => {
-    const previous = paycheckItems;
-    setPaycheckItems((all) =>
-      all.some((existing) => existing.id === item.id)
-        ? all.map((existing) =>
-            existing.id === item.id ? { ...existing, ...item } : existing,
-          )
-        : [...all, { ...item, position: all.length }],
-    );
-    invoke("upsert_paycheck_item", {
-      id: item.id,
-      label: item.label,
-      bucketId: item.bucketId,
-    }).catch(failSave("that line item", () => setPaycheckItems(previous)));
-  };
-
-  const handleDeleteItem = (id: string) => {
-    const previousItems = paycheckItems;
-    const previousPaychecks = paychecks;
-    setPaycheckItems((all) => all.filter((item) => item.id !== id));
-    setPaychecks((all) =>
-      all.map((paycheck) => ({
-        ...paycheck,
-        versions: paycheck.versions.map((version) => ({
-          ...version,
-          values: version.values.filter((value) => value.itemId !== id),
+  const lineItemHandlers = usePaycheckLineItems({
+    buckets: paycheckBuckets,
+    setBuckets: setPaycheckBuckets,
+    items: paycheckItems,
+    setItems: setPaycheckItems,
+    onError: setDbError,
+    onItemRemoved: (id) => {
+      const previous = paychecks;
+      setPaychecks((all) =>
+        all.map((paycheck) => ({
+          ...paycheck,
+          versions: paycheck.versions.map((version) => ({
+            ...version,
+            values: version.values.filter((value) => value.itemId !== id),
+          })),
         })),
-      })),
-    );
-    invoke("delete_paycheck_item", { id }).catch(
-      failSave("that change", () => {
-        setPaycheckItems(previousItems);
-        setPaychecks(previousPaychecks);
-      }),
-    );
-  };
-
-  const handleMoveItem = (
-    itemId: string,
-    bucketId: string | null,
-    beforeItemId: string | null,
-  ) => {
-    const previous = paycheckItems;
-    const next = moveItem(paycheckItems, itemId, bucketId, beforeItemId);
-    if (next === paycheckItems) {
-      return;
-    }
-    setPaycheckItems(next);
-    const layout = [...next]
-      .sort((a, b) => a.position - b.position)
-      .map((item) => ({ id: item.id, bucketId: item.bucketId }));
-    invoke("set_paycheck_item_layout", { layout }).catch(
-      failSave("that move", () => setPaycheckItems(previous)),
-    );
-  };
-
-  const handleMoveBucket = (
-    bucketId: string,
-    beforeBucketId: string | null,
-  ) => {
-    const previous = paycheckBuckets;
-    const next = moveBucket(paycheckBuckets, bucketId, beforeBucketId);
-    if (next === paycheckBuckets) {
-      return;
-    }
-    setPaycheckBuckets(next);
-    const ids = [...next]
-      .sort((a, b) => a.position - b.position)
-      .map((bucket) => bucket.id);
-    invoke("set_paycheck_bucket_positions", { ids }).catch(
-      failSave("that move", () => setPaycheckBuckets(previous)),
-    );
-  };
+      );
+      return () => setPaychecks(previous);
+    },
+  });
+  const {
+    onSaveBucket: handleSaveBucket,
+    onDeleteBucket: handleDeleteBucket,
+    onSaveItem: handleSaveItem,
+    onDeleteItem: handleDeleteItem,
+    onMoveItem: handleMoveItem,
+    onMoveBucket: handleMoveBucket,
+  } = lineItemHandlers;
 
   const categoryOptionsByBucket = useMemo(
     () => [
