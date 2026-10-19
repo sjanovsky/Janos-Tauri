@@ -5,13 +5,21 @@ import type { ImportedTransaction } from "../../upload/lib/csvParser";
 import {
   matchAmount,
   parseMatch,
-  TAX_BUCKETS_KEY,
-  taxBucketIds,
+  defaultSections,
+  parseSections,
+  lineKey,
+  matchKey,
+  bucketSource,
+  expandBucketSources,
+  itemSource,
   planPaycheck,
   planningTotals,
-  retirementKey,
-  taxKey,
   spendingHistory,
+  NET_INCOME_SOURCE,
+  paymentKey,
+  paymentMapping,
+  paymentsByAccount,
+  type PaymentSource,
 } from "./planning";
 
 const items: PaycheckItemRecord[] = [
@@ -52,38 +60,66 @@ const paycheck: PaycheckRecord = {
   ],
 };
 
+const sections = defaultSections(items, ["withholding", "tax"], [], { taxes: "#69c", retirement: "#486" });
+
 describe("planPaycheck", () => {
   it("annualizes the current version and adds extra income", () => {
-    const plan = planPaycheck(paycheck, items, buckets, new Map());
+    const plan = planPaycheck(paycheck, items, buckets, new Map(), sections);
     expect(plan.baseSalary).toBe(104_000);
     expect(plan.annualIncome).toBe(114_000);
-    expect(plan.retirementDefault).toBe(10_400);
-    expect(plan.retirement).toBe(10_400);
-    expect(plan.retirementOverridden).toBe(false);
-    expect(plan.taxLines.map((line) => line.pulled)).toEqual([13_000, 6_500]);
-    expect(plan.taxes).toBe(19_500);
+    const [taxes, retirement] = plan.sections;
+    expect(taxes.lines.map((line) => line.pulled)).toEqual([13_000, 6_500]);
+    expect(taxes.amount).toBe(19_500);
+    expect(retirement.lines.map((line) => [line.name, line.value])).toEqual([["401K", 10_400]]);
   });
 
-  it("lets a tax line be overridden", () => {
-    const plan = planPaycheck(paycheck, items, buckets, new Map([[taxKey("tax", "pc1"), "7000"]]));
-    expect(plan.taxes).toBe(20_000);
-  });
-
-  it("picks tax buckets by name until the user chooses", () => {
-    expect(taxBucketIds(buckets, new Map())).toEqual(["withholding", "tax"]);
-    expect(taxBucketIds(buckets, new Map([[TAX_BUCKETS_KEY, "tax"]]))).toEqual(["tax"]);
-    expect(taxBucketIds(buckets, new Map([[TAX_BUCKETS_KEY, ""]]))).toEqual([]);
+  it("lets a line be overridden", () => {
+    const key = lineKey("taxes", itemSource("ss"), "pc1");
+    const plan = planPaycheck(paycheck, items, buckets, new Map([[key, "7000"]]), sections);
+    expect(plan.sections[0].amount).toBe(20_000);
+    expect(plan.sections[0].lines[1].overridden).toBe(true);
   });
 
   it("uses typed overrides and the company match", () => {
     const settings = new Map([
-      [retirementKey("pc1"), "12000"],
-      ["match:pc1", "5%"],
+      [lineKey("retirement", itemSource("401k"), "pc1"), "12000"],
+      [matchKey("retirement", "pc1"), "5%"],
     ]);
-    const plan = planPaycheck(paycheck, items, buckets, settings);
-    expect(plan.retirement).toBe(12_000);
-    expect(plan.retirementOverridden).toBe(true);
-    expect(plan.matchAmount).toBe(5_700);
+    const retirement = planPaycheck(paycheck, items, buckets, settings, sections).sections[1];
+    expect(retirement.amount).toBe(12_000);
+    expect(retirement.matchAmount).toBe(5_700);
+  });
+
+  it("ignores a match on a section without one, and sources that no longer exist", () => {
+    const custom = [
+      { id: "x", name: "Other", color: "", sources: [itemSource("hsa"), bucketSource("gone"), itemSource("fed")], match: false },
+    ];
+    const plan = planPaycheck(paycheck, items, buckets, new Map([[matchKey("x", "pc1"), "5%"]]), custom);
+    expect(plan.sections[0].lines.map((line) => line.name)).toEqual(["HSA", "Federal"]);
+    expect(plan.sections[0].matchAmount).toBe(0);
+  });
+});
+
+describe("sections", () => {
+  it("parses saved sections and rejects garbage", () => {
+    expect(parseSections(undefined)).toBeNull();
+    expect(parseSections("nope")).toBeNull();
+    expect(parseSections(JSON.stringify([{ id: "a", name: "A", color: "#fff", sources: ["item:x"], match: true }]))).toEqual([
+      { id: "a", name: "A", color: "#fff", sources: ["item:x"], match: true },
+    ]);
+  });
+
+  it("starts retirement with the items in savings buckets and loose 401K items", () => {
+    const [, retirement] = defaultSections(items, [], ["tax"], { taxes: "", retirement: "" });
+    expect(retirement.sources).toEqual(["item:ss", "item:401k"]);
+  });
+
+  it("expands saved bucket sources into their items", () => {
+    const [expanded] = expandBucketSources(
+      [{ id: "a", name: "A", color: "", sources: ["bucket:withholding", "item:hsa", "bucket:gone"], match: false }],
+      items,
+    );
+    expect(expanded.sources).toEqual(["item:fed", "item:hsa"]);
   });
 });
 
@@ -134,9 +170,30 @@ describe("spendingHistory", () => {
 
 describe("planningTotals", () => {
   it("leaves income minus taxes, 401K and spending", () => {
-    const plan = planPaycheck(paycheck, items, buckets, new Map([["match:pc1", "1000"]]));
-    const totals = planningTotals([plan], 50_000);
+    const plan = planPaycheck(paycheck, items, buckets, new Map([[matchKey("retirement", "pc1"), "1000"]]), sections);
+    const totals = planningTotals([plan], sections, 50_000);
     expect(totals.remaining).toBe(114_000 - 19_500 - 10_400 - 50_000);
-    expect(totals.retirementSaved).toBe(11_400);
+    expect(totals.sections.map((section) => [section.amount, section.match])).toEqual([
+      [19_500, 0],
+      [10_400, 1_000],
+    ]);
+  });
+});
+
+describe("forecast payments", () => {
+  const sources: PaymentSource[] = [
+    { key: "401k:pc1", name: "A 401K", color: "", amount: 20000 },
+    { key: "match:pc1", name: "A match", color: "", amount: 5000 },
+    { key: NET_INCOME_SOURCE, name: "Net income", color: "", amount: 40000 },
+  ];
+
+  it("sums the sources mapped to each account and ignores missing accounts", () => {
+    const settings = new Map([
+      [paymentKey("401k:pc1"), "acct-401k"],
+      [paymentKey("match:pc1"), "acct-401k"],
+      [paymentKey(NET_INCOME_SOURCE), "gone"],
+    ]);
+    const mapping = paymentMapping(sources, settings, new Set(["acct-401k", "acct-savings"]));
+    expect(paymentsByAccount(sources, mapping)).toEqual({ "acct-401k": 25000 });
   });
 });

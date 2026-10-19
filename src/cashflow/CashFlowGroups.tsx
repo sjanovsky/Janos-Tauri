@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
+import { useState, type CSSProperties, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { ColorSwatchPicker } from "../spending/ColorSwatchPicker";
 import { GripIcon, PlusIcon, TrashIcon } from "../spending/BucketsAndCategories";
 import { UNGROUPED_BUCKET_COLOR } from "../spending/lib/categories";
@@ -20,6 +20,15 @@ type CashFlowGroupsProps = {
   onReorderGroups: (orderedIds: string[]) => void;
   // Move an item into a group, or null for Ungrouped.
   onPlaceItem: (itemKey: string, groupId: string | null) => void;
+  // Heading copy, for boards (like Planning's) that reuse this one for something other than Cash Flow.
+  title?: string;
+  description?: ReactNode;
+  // What the dragged pills are called in the board's column header.
+  itemsLabel?: string;
+  // When given, each pill gets a delete button that calls this with the pill's key.
+  onRemoveItem?: (itemKey: string) => void;
+  // Extra content under the board, before the "New group" field (Planning's add-back field).
+  footer?: ReactNode;
 };
 
 const ITEM_DRAG_TYPE = "application/x-janos-cashflow-item";
@@ -43,6 +52,17 @@ function CashFlowGroups({
   onDeleteGroup,
   onReorderGroups,
   onPlaceItem,
+  title = "Cash Flow Groups",
+  itemsLabel = "Buckets",
+  onRemoveItem,
+  footer,
+  description = (
+    <>
+      Drag a bucket into a group to roll it up on the Cash Flow chart. Drag “Leftover” into one
+      (usually Savings) to count what's left each month as that group's money; leave it out and it
+      shows as Net income.
+    </>
+  ),
 }: CashFlowGroupsProps) {
   const [newGroup, setNewGroup] = useState("");
   const [draggingItem, setDraggingItem] = useState<string | null>(null);
@@ -162,6 +182,17 @@ function CashFlowGroups({
       onDragEnd={clearItemDrag}
     >
       <span className="cat-pill__label">{item.name}</span>
+      {onRemoveItem && (
+        <button
+          type="button"
+          className="cat-pill__remove"
+          aria-label={`Remove ${item.name}`}
+          title={`Remove ${item.name} from this list`}
+          onClick={() => onRemoveItem(item.key)}
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 
@@ -170,18 +201,14 @@ function CashFlowGroups({
   return (
     <section className="category-manager">
       <div className="category-manager__heading">
-        <h2>Cash Flow Groups</h2>
-        <p>
-          Drag a bucket into a group to roll it up on the Cash Flow chart. Drag “Leftover” into one
-          (usually Savings) to count what's left each month as that group's money; leave it out and it
-          shows as Net income.
-        </p>
+        <h2>{title}</h2>
+        <p>{description}</p>
       </div>
 
       <div className="bucket-board">
         <div className="bucket-board__header">
           <span className="bucket-board__header-label">Group</span>
-          <span className="bucket-board__header-label">Buckets</span>
+          <span className="bucket-board__header-label">{itemsLabel}</span>
         </div>
         {displayGroups().map((group) => {
           const members = itemsIn(group.id);
@@ -239,7 +266,7 @@ function CashFlowGroups({
 
               <div className="bucket-row__items">
                 {members.length === 0 ? (
-                  <span className="bucket-row__empty">Drag buckets here</span>
+                  <span className="bucket-row__empty">Drag {itemsLabel.toLowerCase()} here</span>
                 ) : (
                   members.map(renderPill)
                 )}
@@ -276,6 +303,8 @@ function CashFlowGroups({
           </div>
         </div>
       </div>
+
+      {footer}
 
       <div className="bucket-board__forms">
         <form className="bucket-board__add" onSubmit={handleAddSubmit}>

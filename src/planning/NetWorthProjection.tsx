@@ -7,6 +7,7 @@ import {
   type BalanceRecord,
   type NetWorthBucketRecord,
 } from "../networth/lib/networth";
+import { usePlanningPayments } from "./lib/usePlanningPayments";
 import { DEFAULT_YEARS, buildForecast, type RateRange } from "../forecasting/lib/forecast";
 
 // The Forecasting tab keeps its years-to-forecast and per-account return ranges here; reading them
@@ -51,9 +52,11 @@ function NetWorthProjection() {
     invoke<BalanceRecord[]>("list_networth_balances").then(setBalances).catch(fail);
   }, []);
 
+  const payments = usePlanningPayments(accounts);
+
   const rows = useMemo(() => {
     const { years, rates } = savedAssumptions();
-    const forecast = buildForecast(buckets, accounts, balances, currentMonth(), years, rates);
+    const forecast = buildForecast(buckets, accounts, balances, currentMonth(), years, rates, payments);
     return [
       ...forecast.historicYears.map((year, index) => ({
         year,
@@ -70,7 +73,7 @@ function NetWorthProjection() {
         projected: true,
       })),
     ];
-  }, [buckets, accounts, balances]);
+  }, [buckets, accounts, balances, payments]);
 
   if (failed || rows.length === 0) {
     return (
@@ -91,7 +94,7 @@ function NetWorthProjection() {
     <div className="planning-card planning-chart">
       <header className="planning-heading">
         <h2>Projected net worth</h2>
-        <p>Year-end balances from Net Worth, then the Forecasting midpoint with its low–high range.</p>
+        <p>Year-end balances from Net Worth, then the Forecasting midpoint with its low–high range (including mapped payments).</p>
       </header>
       <svg viewBox={`0 0 ${W} ${height}`} role="img" aria-label="Projected net worth by year">
         <line className="planning-chart__axis" x1={x(0)} x2={x(0)} y1={TOP} y2={height - TOP} />

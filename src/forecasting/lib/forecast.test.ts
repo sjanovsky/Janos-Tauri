@@ -43,3 +43,18 @@ describe("buildForecast", () => {
     expect(result.forecastYears).toEqual([]);
   });
 });
+
+describe("payments", () => {
+  it("adds the yearly payment at the end of each forecast year", () => {
+    const result = buildForecast(
+      buckets,
+      [{ id: "a", name: "A", bucketId: "b1", position: 0 }],
+      [{ accountId: "a", month: "2024-12", amount: 1000 }],
+      "2025-01",
+      2,
+      { a: { low: 10, high: 10 } },
+      { a: 500 },
+    );
+    expect(result.groups[0].accounts[0].mid).toEqual([1600, 2260]);
+  });
+});

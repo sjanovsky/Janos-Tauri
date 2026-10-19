@@ -8,12 +8,21 @@ import {
   type NetWorthBucketRecord,
 } from "../networth/lib/networth";
 import { DEFAULT_YEARS, MAX_YEARS, buildForecast, type ForecastResult, type RateRange } from "./lib/forecast";
+import { usePlanningPayments } from "../planning/lib/usePlanningPayments";
 import "./forecasting.css";
 
 const DB_ERROR = "Couldn't reach the local database. Make sure the app is running via `npm run tauri dev`.";
 const STORAGE_KEY = "janos.forecasting.v1";
 
-type Saved = { years: number; rates: Record<string, RateRange> };
+type RateMode = "range" | "single";
+// `singles` holds the one-number rate per account, kept apart from the low/high range so switching
+// modes doesn't lose either.
+type Saved = {
+  years: number;
+  rates: Record<string, RateRange>;
+  mode: RateMode;
+  singles: Record<string, number>;
+};
 type Group = ForecastResult["groups"][number];
 
 function loadSaved(): Saved {
@@ -22,9 +31,11 @@ function loadSaved(): Saved {
     return {
       years: typeof parsed?.years === "number" ? parsed.years : DEFAULT_YEARS,
       rates: parsed?.rates && typeof parsed.rates === "object" ? parsed.rates : {},
+      mode: parsed?.mode === "single" ? "single" : "range",
+      singles: parsed?.singles && typeof parsed.singles === "object" ? parsed.singles : {},
     };
   } catch {
-    return { years: DEFAULT_YEARS, rates: {} };
+    return { years: DEFAULT_YEARS, rates: {}, mode: "range", singles: {} };
   }
 }
 
@@ -60,13 +71,35 @@ function ForecastingPage() {
     }
   }, [saved]);
 
-  const forecast = useMemo(
-    () => buildForecast(buckets, accounts, balances, currentMonth(), saved.years, saved.rates),
-    [buckets, accounts, balances, saved],
-  );
+  const payments = usePlanningPayments(accounts);
+  const single = saved.mode === "single";
+  const forecast = useMemo(() => {
+    const ranged = buildForecast(buckets, accounts, balances, currentMonth(), saved.years, saved.rates, payments);
+    if (!single) {
+      return ranged;
+    }
+    // One rate per account (its saved number, else the middle of its range) used as both low and high.
+    const rates: Record<string, RateRange> = {};
+    ranged.groups.forEach((group) =>
+      group.accounts.forEach((account) => {
+        const rate = saved.singles[account.accountId] ?? (account.rate.low + account.rate.high) / 2;
+        rates[account.accountId] = { low: rate, high: rate };
+      }),
+    );
+    return buildForecast(buckets, accounts, balances, currentMonth(), saved.years, rates, payments);
+  }, [buckets, accounts, balances, saved, payments, single]);
 
   const setRate = (accountId: string, rate: RateRange) =>
-    setSaved((current) => ({ ...current, rates: { ...current.rates, [accountId]: rate } }));
+    setSaved((current) => ({
+      ...current,
+      rates: { ...current.rates, [accountId]: rate },
+    }));
+
+  const setSingle = (accountId: string, rate: number) =>
+    setSaved((current) => ({
+      ...current,
+      singles: { ...current.singles, [accountId]: rate },
+    }));
 
   const hasData = forecast.historicYears.length > 0;
 
@@ -80,22 +113,42 @@ function ForecastingPage() {
               <h2>Net worth forecast</h2>
               <p className="networth-chart-subtitle">
                 Year-end balances from the Net Worth page, then each year projected from your latest balances. Set each
-                account's low and high expected annual return in the table; the chart shades the range between them.
+                account's expected annual return in the table (a low and high range, or a single number); with a range,
+                the chart shades the range between them. Accounts mapped on the Planning page also receive their yearly
+                payment at the end of each forecast year.
               </p>
             </div>
-            <label className="forecast-years">
-              Years to forecast
-              <NumberInput
-                value={saved.years}
-                min={1}
-                max={MAX_YEARS}
-                integer
-                onCommit={(years) => setSaved((current) => ({ ...current, years }))}
-              />
-            </label>
+            <div className="forecast-controls">
+              <label className="forecast-years">
+                Return
+                <select
+                  className="forecast-input forecast-mode"
+                  value={saved.mode}
+                  onChange={(event) =>
+                    setSaved((current) => ({
+                      ...current,
+                      mode: event.target.value as RateMode,
+                    }))
+                  }
+                >
+                  <option value="range">Range</option>
+                  <option value="single">Single</option>
+                </select>
+              </label>
+              <label className="forecast-years">
+                Years to forecast
+                <NumberInput
+                  value={saved.years}
+                  min={1}
+                  max={MAX_YEARS}
+                  integer
+                  onCommit={(years) => setSaved((current) => ({ ...current, years }))}
+                />
+              </label>
+            </div>
           </div>
           {hasData ? (
-            <ForecastGrid forecast={forecast} onRate={setRate} />
+            <ForecastGrid forecast={forecast} single={single} onRate={setRate} onSingle={setSingle} />
           ) : (
             <div className="import-shell__empty">Enter balances on the Net Worth page to build a forecast.</div>
           )}
@@ -179,7 +232,7 @@ function niceTicks(min: number, max: number, target = 5): number[] {
 
 // Line chart over every year: a solid line for real year-end net worth, then — past a labelled
 // divider on a tinted background — a shaded low-to-high band with a dashed midpoint line.
-function ForecastChart({ forecast, yearW }: { forecast: ForecastResult; yearW: number }) {
+function ForecastChart({ forecast, yearW, single }: { forecast: ForecastResult; yearW: number; single: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
   const { historicYears, forecastYears, netHistoric, netLow, netMid, netHigh } = forecast;
   const years = [...historicYears, ...forecastYears];
@@ -214,11 +267,13 @@ function ForecastChart({ forecast, yearW }: { forecast: ForecastResult; yearW: n
       ? []
       : hover < histCount
         ? [{ label: "Actual", value: netHistoric[hover] }]
-        : [
-            { label: "High", value: netHigh[hover - histCount] },
-            { label: "Mid", value: netMid[hover - histCount] },
-            { label: "Low", value: netLow[hover - histCount] },
-          ];
+        : single
+          ? [{ label: "Forecast", value: netMid[hover - histCount] }]
+          : [
+              { label: "High", value: netHigh[hover - histCount] },
+              { label: "Mid", value: netMid[hover - histCount] },
+              { label: "Low", value: netLow[hover - histCount] },
+            ];
 
   return (
     <div className="forecast-chart">
@@ -227,16 +282,24 @@ function ForecastChart({ forecast, yearW }: { forecast: ForecastResult; yearW: n
           <i className="forecast-key forecast-key--actual" />
           Actual
         </span>
-        <span>
-          <i className="forecast-key forecast-key--band" />
-          Forecast range (low–high)
-        </span>
+        {!single && (
+          <span>
+            <i className="forecast-key forecast-key--band" />
+            Forecast range (low–high)
+          </span>
+        )}
         <span>
           <i className="forecast-key forecast-key--mid" />
-          Forecast midpoint
+          {single ? "Forecast" : "Forecast midpoint"}
         </span>
       </div>
-      <svg width={W} height={H} role="img" aria-label="Net worth history and forecast" onMouseLeave={() => setHover(null)}>
+      <svg
+        width={W}
+        height={H}
+        role="img"
+        aria-label="Net worth history and forecast"
+        onMouseLeave={() => setHover(null)}
+      >
         {forecastYears.length > 0 && (
           <>
             <rect className="forecast-zone" x={dividerX} y={M.top} width={LEFT + innerW - dividerX} height={innerH} />
@@ -267,9 +330,13 @@ function ForecastChart({ forecast, yearW }: { forecast: ForecastResult; yearW: n
         {forecastYears.length > 0 && (
           <>
             <line className="forecast-divider" x1={dividerX} x2={dividerX} y1={M.top} y2={M.top + innerH} />
-            <path className="forecast-band" d={band} />
-            <path className="forecast-line forecast-line--edge" d={line(low, from)} />
-            <path className="forecast-line forecast-line--edge" d={line(high, from)} />
+            {!single && (
+              <>
+                <path className="forecast-band" d={band} />
+                <path className="forecast-line forecast-line--edge" d={line(low, from)} />
+                <path className="forecast-line forecast-line--edge" d={line(high, from)} />
+              </>
+            )}
             <path className="forecast-line forecast-line--mid" d={line([anchor, ...netMid], from)} />
           </>
         )}
@@ -331,10 +398,14 @@ function ForecastChart({ forecast, yearW }: { forecast: ForecastResult; yearW: n
 
 function ForecastGrid({
   forecast,
+  single,
   onRate,
+  onSingle,
 }: {
   forecast: ForecastResult;
+  single: boolean;
   onRate: (accountId: string, rate: RateRange) => void;
+  onSingle: (accountId: string, rate: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -355,8 +426,8 @@ function ForecastGrid({
 
   return (
     <div className="forecast-scroll" ref={ref}>
-      <ForecastChart forecast={forecast} yearW={yearW} />
-      <ForecastTable forecast={forecast} yearW={yearW} onRate={onRate} />
+      <ForecastChart forecast={forecast} yearW={yearW} single={single} />
+      <ForecastTable forecast={forecast} yearW={yearW} single={single} onRate={onRate} onSingle={onSingle} />
     </div>
   );
 }
@@ -378,11 +449,15 @@ function sumSeries(group: Group, pick: (account: Group["accounts"][number]) => (
 function ForecastTable({
   forecast,
   yearW,
+  single,
   onRate,
+  onSingle,
 }: {
   forecast: ForecastResult;
   yearW: number;
+  single: boolean;
   onRate: (accountId: string, rate: RateRange) => void;
+  onSingle: (accountId: string, rate: number) => void;
 }) {
   const { historicYears, forecastYears, groups, netHistoric, netLow, netMid, netHigh } = forecast;
   const histCount = historicYears.length;
@@ -428,8 +503,16 @@ function ForecastTable({
           </tr>
           <tr>
             <th className="forecast-label" />
-            <th className="forecast-cell">Low %</th>
-            <th className="forecast-cell">High %</th>
+            {single ? (
+              <th className="forecast-cell" colSpan={2}>
+                Return %
+              </th>
+            ) : (
+              <>
+                <th className="forecast-cell">Low %</th>
+                <th className="forecast-cell">High %</th>
+              </>
+            )}
             {historicYears.map((year) => (
               <th key={year} className="forecast-cell">
                 {year}
@@ -450,29 +533,50 @@ function ForecastTable({
                   <th className="forecast-label">
                     <span className="forecast-swatch" style={{ background: group.meta.color }} />
                     {account.name}
+                    {account.payment > 0 && (
+                      <span className="forecast-payment" title="Yearly payment mapped on the Planning page">
+                        +{money(account.payment)}/yr
+                      </span>
+                    )}
                   </th>
-                  <td className="forecast-cell forecast-rate">
-                    <NumberInput
-                      value={account.rate.low}
-                      step={0.5}
-                      suffix="%"
-                      label={`${account.name} low annual return`}
-                      onCommit={(low) => onRate(account.accountId, { ...account.rate, low })}
-                    />
-                  </td>
-                  <td className="forecast-cell forecast-rate">
-                    <NumberInput
-                      value={account.rate.high}
-                      step={0.5}
-                      suffix="%"
-                      label={`${account.name} high annual return`}
-                      onCommit={(high) => onRate(account.accountId, { ...account.rate, high })}
-                    />
-                  </td>
+                  {single ? (
+                    <td colSpan={2} className="forecast-cell forecast-rate">
+                      <NumberInput
+                        value={account.rate.low}
+                        step={0.5}
+                        suffix="%"
+                        label={`${account.name} annual return`}
+                        onCommit={(rate) => onSingle(account.accountId, rate)}
+                      />
+                    </td>
+                  ) : (
+                    <>
+                      <td className="forecast-cell forecast-rate">
+                        <NumberInput
+                          value={account.rate.low}
+                          step={0.5}
+                          suffix="%"
+                          label={`${account.name} low annual return`}
+                          onCommit={(low) => onRate(account.accountId, { ...account.rate, low })}
+                        />
+                      </td>
+                      <td className="forecast-cell forecast-rate">
+                        <NumberInput
+                          value={account.rate.high}
+                          step={0.5}
+                          suffix="%"
+                          label={`${account.name} high annual return`}
+                          onCommit={(high) => onRate(account.accountId, { ...account.rate, high })}
+                        />
+                      </td>
+                    </>
+                  )}
                   {cells(
                     account.historic,
                     account.mid,
-                    (index) => `Low ${money(account.low[index])} · High ${money(account.high[index])}`,
+                    single
+                      ? undefined
+                      : (index) => `Low ${money(account.low[index])} · High ${money(account.high[index])}`,
                   )}
                 </tr>
               ))}
@@ -492,6 +596,7 @@ function ForecastTable({
             {cells(netHistoric, netMid)}
           </tr>
           {forecastYears.length > 0 &&
+            !single &&
             (
               [
                 ["Low case", netLow],

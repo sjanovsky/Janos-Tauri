@@ -39,6 +39,16 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => ({
   label: new Date(2000, index, 1).toLocaleString(undefined, { month: "short" }),
 }));
 
+const CASH_FLOW_ROWS = [
+  { key: "income", label: "Income" },
+  { key: "expenses", label: "Expenses" },
+  { key: "net", label: "Net income" },
+] as const;
+
+// Income starts the tinted block (with a gap above it); Net income closes it, bold under a divider.
+const cashFlowRowClass = (key: (typeof CASH_FLOW_ROWS)[number]["key"]) =>
+  key === "income" ? "networth-cashflow--start" : key === "net" ? "networth-cashflow--net" : "";
+
 type TooltipAnchor = { point: NetWorthPoint; x: number; y: number; bucketId: string | null };
 
 type NetWorthChartProps = {
@@ -54,6 +64,8 @@ type NetWorthChartProps = {
   scale: DivergingScale;
   groups: BucketGroup[];
   netPerColumn: number[];
+  // Actual income, expenses and net income per column, shown beneath the Net worth row.
+  cashFlowPerColumn: { income: number; expenses: number; net: number }[];
   onRangeChange: (range: NetWorthRange) => void;
   // Commit an edited cell: a number sets/updates the balance, null clears it (back to carried).
   onSetBalance: (accountId: string, month: string, amount: number | null) => void;
@@ -94,6 +106,7 @@ function NetWorthChart({
   scale,
   groups,
   netPerColumn,
+  cashFlowPerColumn,
   onRangeChange,
   onSetBalance,
   onEditMonth,
@@ -147,8 +160,15 @@ function NetWorthChart({
         consider(value);
       }
     });
+    cashFlowPerColumn.forEach(({ income, expenses, net }) => {
+      [income, expenses, net].forEach((value) => {
+        if (value !== 0) {
+          consider(value);
+        }
+      });
+    });
     return Math.max(MIN_COLUMN_BASIS, Math.ceil(widest * CHAR_WIDTH_PX) + COLUMN_PADDING_PX);
-  }, [groups, netPerColumn]);
+  }, [groups, netPerColumn, cashFlowPerColumn]);
 
   const isYear = range === "year";
 
@@ -355,6 +375,11 @@ function NetWorthChart({
                   <GroupLabels key={group.meta.id} group={group} />
                 ))}
                 <div className="import-shell__totals-label import-shell__totals-label--net">Net worth</div>
+                {CASH_FLOW_ROWS.map(({ key, label }) => (
+                  <div key={key} className={`import-shell__totals-label networth-cashflow-label ${cashFlowRowClass(key)}`}>
+                    {label}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -521,6 +546,20 @@ function NetWorthChart({
                       </div>
                     ))}
                   </div>
+                  {CASH_FLOW_ROWS.map(({ key }) => (
+                    <div key={key} className={`import-shell__totals-row networth-cashflow-row ${cashFlowRowClass(key)}${pinnedRowClass}`}>
+                      {isYear && <span className="networth-row-strut" aria-hidden="true" />}
+                      {cashFlowPerColumn.map((values, index) => (
+                        <div
+                          key={columns[index].key}
+                          className="import-shell__totals-cell networth-readonly-cell"
+                          style={cellStyle(columns[index])}
+                        >
+                          {values[key] === 0 ? "—" : wholeCurrencyFormatter.format(values[key])}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

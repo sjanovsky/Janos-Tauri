@@ -21,22 +21,130 @@ import type { ImportedTransaction } from "../../upload/lib/csvParser";
 
 export type PlanningSettingRecord = { key: string; value: string };
 
-// Which paycheck buckets count as taxes: stored as a comma-separated list of bucket ids. Until the
-// user chooses, the buckets whose names look like withholding or taxes are used.
-export const TAX_BUCKETS_KEY = "tax-buckets";
+// The Planning page's sections (Taxes and Retirement to start; the user can add, rename and reorder
+// them). Each section pulls from paycheck line items (older saves may hold whole buckets, which are
+// expanded into their items on load), and is saved as one JSON setting. Until the user saves a layout, the defaults are used.
+export const SECTIONS_KEY = "sections";
+export const TAXES_SECTION_ID = "taxes";
+export const RETIREMENT_SECTION_ID = "retirement";
 
-export function taxBucketIds(buckets: PaycheckBucketRecord[], settings: Map<string, string>): string[] {
-  const saved = settings.get(TAX_BUCKETS_KEY);
-  if (saved !== undefined) {
-    const chosen = new Set(saved.split(",").filter(Boolean));
-    return buckets.filter((bucket) => chosen.has(bucket.id)).map((bucket) => bucket.id);
+export type PlanningSection = {
+  id: string;
+  name: string;
+  color: string;
+  // "item:<id>" (or a legacy "bucket:<id>"); each one is a row in the section.
+  sources: string[];
+  // Whether the section has a company match row (retirement-style).
+  match: boolean;
+};
+
+// Paycheck line items the user took off the settings board (a JSON list of item ids).
+export const HIDDEN_ITEMS_KEY = "hidden-items";
+
+/** The saved hidden item ids; empty when nothing (usable) is saved. */
+export function parseHiddenItems(text: string | undefined): string[] {
+  try {
+    const parsed: unknown = JSON.parse(text ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
   }
-  return buckets.filter((bucket) => /withhold|tax/i.test(bucket.name)).map((bucket) => bucket.id);
 }
-export const taxKey = (bucketId: string, paycheckId: string) => `tax:${bucketId}:${paycheckId}`;
+
+// Payment lines the user took off the Forecast payments board (a JSON list of source keys).
+export const HIDDEN_PAYMENTS_KEY = "hidden-payments";
+
+// Accounts the user took off the Forecast payments board (a JSON list of account ids).
+export const HIDDEN_ACCOUNTS_KEY = "hidden-accounts";
+
+export const bucketSource = (bucketId: string) => `bucket:${bucketId}`;
+export const itemSource = (itemId: string) => `item:${itemId}`;
+
+/** The saved sections, or null when nothing (usable) is saved. */
+export function parseSections(text: string | undefined): PlanningSection[] | null {
+  if (text === undefined) {
+    return null;
+  }
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed.flatMap((entry): PlanningSection[] => {
+      const section = entry as Partial<PlanningSection> | null;
+      if (!section || typeof section.id !== "string" || typeof section.name !== "string") {
+        return [];
+      }
+      return [
+        {
+          id: section.id,
+          name: section.name,
+          color: typeof section.color === "string" ? section.color : "#8b93a1",
+          sources: Array.isArray(section.sources) ? section.sources.filter((source) => typeof source === "string") : [],
+          match: section.match === true,
+        },
+      ];
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** The paycheck items that are 401K contributions (a Roth 401K counts too). */
+export function retirementItems(items: PaycheckItemRecord[]): PaycheckItemRecord[] {
+  return items.filter((item) => /401\s*k/i.test(item.label));
+}
+
+/** Replaces any "bucket:<id>" source with "item:<id>" sources for the items now in that bucket. */
+export function expandBucketSources(sections: PlanningSection[], items: PaycheckItemRecord[]): PlanningSection[] {
+  return sections.map((section) => {
+    if (!section.sources.some((source) => source.startsWith("bucket:"))) {
+      return section;
+    }
+    const expanded = section.sources.flatMap((source) =>
+      source.startsWith("bucket:")
+        ? items.filter((item) => item.bucketId === source.slice("bucket:".length)).map((item) => itemSource(item.id))
+        : [source],
+    );
+    return { ...section, sources: [...new Set(expanded)] };
+  });
+}
+
+/**
+ * Taxes and Retirement, built from the Cash Flow groups: the line items in the paycheck buckets in
+ * its Taxes group, and those in its Savings group plus any ungrouped 401K item.
+ */
+export function defaultSections(
+  items: PaycheckItemRecord[],
+  taxBucketIds: string[],
+  savingsBucketIds: string[],
+  colors: { taxes: string; retirement: string },
+): PlanningSection[] {
+  const looseRetirement = retirementItems(items).filter((item) => !item.bucketId);
+  const itemsIn = (bucketIds: string[]) =>
+    items.filter((item) => item.bucketId && bucketIds.includes(item.bucketId)).map((item) => itemSource(item.id));
+  return [
+    {
+      id: TAXES_SECTION_ID,
+      name: "Taxes",
+      color: colors.taxes,
+      sources: itemsIn(taxBucketIds),
+      match: false,
+    },
+    {
+      id: RETIREMENT_SECTION_ID,
+      name: "Retirement",
+      color: colors.retirement,
+      sources: [...itemsIn(savingsBucketIds), ...looseRetirement.map((item) => itemSource(item.id))],
+      match: true,
+    },
+  ];
+}
+
+export const lineKey = (sectionId: string, source: string, paycheckId: string) =>
+  `line:${sectionId}:${source}:${paycheckId}`;
 export const SPENDING_KEY = "spending";
-export const retirementKey = (paycheckId: string) => `401k:${paycheckId}`;
-export const matchKey = (paycheckId: string) => `match:${paycheckId}`;
+export const matchKey = (sectionId: string, paycheckId: string) => `match:${sectionId}:${paycheckId}`;
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
@@ -70,38 +178,35 @@ export function matchAmount(match: MatchSetting | null, annualIncome: number): n
   return round2(match.kind === "percent" ? (annualIncome * match.value) / 100 : match.value);
 }
 
-/** The paycheck items that are 401K contributions (a Roth 401K counts too). */
-export function retirementItems(items: PaycheckItemRecord[]): PaycheckItemRecord[] {
-  return items.filter((item) => /401\s*k/i.test(item.label));
-}
-
-export type TaxLine = {
-  bucketId: string;
+export type PlanLine = {
+  // The section's source ("item:<id>") and the setting key its override is stored under.
+  source: string;
+  key: string;
   name: string;
-  // The bucket's items on the current paycheck, annualized, and what's used (override or that).
+  // The source's amounts on the current paycheck, annualized, and what's used (override or that).
   pulled: number;
   value: number;
   overridden: boolean;
+};
+
+export type SectionPlan = {
+  sectionId: string;
+  lines: PlanLine[];
+  // The lines' sum, without the match.
+  amount: number;
+  match: MatchSetting | null;
+  matchText: string;
+  matchAmount: number;
 };
 
 export type PaycheckPlan = {
   paycheckId: string;
   name: string;
   color: string;
-  gross: number;
-  paychecksPerYear: number;
   baseSalary: number;
   extraIncome: number;
   annualIncome: number;
-  // 401K per paycheck on the current paycheck, annualized, and what's used (override or that).
-  taxLines: TaxLine[];
-  taxes: number;
-  retirementDefault: number;
-  retirement: number;
-  retirementOverridden: boolean;
-  match: MatchSetting | null;
-  matchText: string;
-  matchAmount: number;
+  sections: SectionPlan[];
 };
 
 /** One paycheck's yearly picture, using its current version going forward. */
@@ -110,52 +215,59 @@ export function planPaycheck(
   items: PaycheckItemRecord[],
   buckets: PaycheckBucketRecord[],
   settings: Map<string, string>,
+  sections: PlanningSection[],
 ): PaycheckPlan {
   const version = currentVersion(paycheck);
   const gross = version?.gross ?? 0;
   const baseSalary = round2(gross * paycheck.paychecksPerYear);
   const annualIncome = round2(baseSalary + paycheck.extraIncome);
 
-  const perPaycheck = version
-    ? retirementItems(items).reduce((sum, item) => sum + paycheckItemAmount(version, item.id), 0)
-    : 0;
-  const retirementDefault = round2(perPaycheck * paycheck.paychecksPerYear);
-  const typedRetirement = parseAmount(settings.get(retirementKey(paycheck.id)) ?? "");
-
-  const taxLines = taxBucketIds(buckets, settings).flatMap((bucketId): TaxLine[] => {
-    const bucket = buckets.find((candidate) => candidate.id === bucketId);
-    if (!bucket) {
-      return [];
+  const sourceInfo = (source: string): { name: string; itemIds: string[] } | null => {
+    if (source.startsWith("bucket:")) {
+      const bucket = buckets.find((candidate) => candidate.id === source.slice("bucket:".length));
+      return bucket
+        ? { name: bucket.name, itemIds: items.filter((item) => item.bucketId === bucket.id).map((item) => item.id) }
+        : null;
     }
-    const perCheck = version
-      ? items
-          .filter((item) => item.bucketId === bucketId)
-          .reduce((sum, item) => sum + paycheckItemAmount(version, item.id), 0)
-      : 0;
-    const pulled = round2(perCheck * paycheck.paychecksPerYear);
-    const typed = parseAmount(settings.get(taxKey(bucketId, paycheck.id)) ?? "");
-    return [{ bucketId, name: bucket.name, pulled, value: typed ?? pulled, overridden: typed !== null }];
+    const item = items.find((candidate) => candidate.id === source.slice("item:".length));
+    return item ? { name: item.label, itemIds: [item.id] } : null;
+  };
+
+  const sectionPlans = sections.map((section): SectionPlan => {
+    const lines = section.sources.flatMap((source): PlanLine[] => {
+      const info = sourceInfo(source);
+      if (!info) {
+        return [];
+      }
+      const perCheck = version
+        ? info.itemIds.reduce((sum, itemId) => sum + paycheckItemAmount(version, itemId), 0)
+        : 0;
+      const pulled = round2(perCheck * paycheck.paychecksPerYear);
+      const key = lineKey(section.id, source, paycheck.id);
+      const typed = parseAmount(settings.get(key) ?? "");
+      return [{ source, key, name: info.name, pulled, value: typed ?? pulled, overridden: typed !== null }];
+    });
+    const amount = round2(lines.reduce((sum, line) => sum + line.value, 0));
+    const matchText = section.match ? (settings.get(matchKey(section.id, paycheck.id)) ?? "") : "";
+    const match = parseMatch(matchText);
+    return {
+      sectionId: section.id,
+      lines,
+      amount,
+      match,
+      matchText,
+      matchAmount: matchAmount(match, annualIncome),
+    };
   });
 
-  const matchText = settings.get(matchKey(paycheck.id)) ?? "";
-  const match = parseMatch(matchText);
   return {
     paycheckId: paycheck.id,
     name: paycheck.name,
     color: paycheck.color,
-    gross,
-    paychecksPerYear: paycheck.paychecksPerYear,
     baseSalary,
     extraIncome: paycheck.extraIncome,
     annualIncome,
-    taxLines,
-    taxes: round2(taxLines.reduce((sum, line) => sum + line.value, 0)),
-    retirementDefault,
-    retirement: typedRetirement ?? retirementDefault,
-    retirementOverridden: typedRetirement !== null,
-    match,
-    matchText,
-    matchAmount: matchAmount(match, annualIncome),
+    sections: sectionPlans,
   };
 }
 
@@ -237,32 +349,105 @@ export function spendingHistory(
   };
 }
 
+export type SectionTotal = { sectionId: string; amount: number; match: number };
+
 export type PlanningTotals = {
   annualIncome: number;
-  taxes: number;
-  retirement: number;
-  match: number;
+  // Each section across every paycheck (the match isn't part of its amount).
+  sections: SectionTotal[];
   spending: number;
-  // Income left after taxes (withholding and payroll taxes), 401K and spending (the company match isn't paid out of income).
+  // Income left after every section and spending (the company match isn't paid out of income).
   remaining: number;
-  // 401K plus the company match.
-  retirementSaved: number;
 };
 
-export function planningTotals(plans: PaycheckPlan[], spending: number): PlanningTotals {
-  const sum = (pick: (plan: PaycheckPlan) => number) => round2(plans.reduce((total, plan) => total + pick(plan), 0));
-  const annualIncome = sum((plan) => plan.annualIncome);
-  const taxes = sum((plan) => plan.taxes);
-  const retirement = sum((plan) => plan.retirement);
-  const match = sum((plan) => plan.matchAmount);
+export function planningTotals(plans: PaycheckPlan[], sections: PlanningSection[], spending: number): PlanningTotals {
+  const annualIncome = round2(plans.reduce((total, plan) => total + plan.annualIncome, 0));
+  const sectionTotals = sections.map((section): SectionTotal => {
+    const parts = plans.flatMap((plan) => plan.sections.filter((candidate) => candidate.sectionId === section.id));
+    return {
+      sectionId: section.id,
+      amount: round2(parts.reduce((total, part) => total + part.amount, 0)),
+      match: round2(parts.reduce((total, part) => total + part.matchAmount, 0)),
+    };
+  });
+  const deducted = sectionTotals.reduce((total, section) => total + section.amount, 0);
   return {
     annualIncome,
-    taxes,
-    retirement,
-    match,
+    sections: sectionTotals,
     spending,
-    remaining: round2(annualIncome - taxes - retirement - spending),
-    retirementSaved: round2(retirement + match),
+    remaining: round2(annualIncome - deducted - spending),
   };
 }
 
+// --- Forecast payments ---
+//
+// A planning line can be mapped to a Net Worth account; the Forecasting page then adds that line's
+// yearly amount to the account as a payment each forecast year. A mapping is one planning setting:
+// `pay:<source key>` → account id.
+
+export const NET_INCOME_SOURCE = "net-income";
+export const paymentKey = (sourceKey: string) => `pay:${sourceKey}`;
+
+export type PaymentSource = { key: string; name: string; color: string; amount: number };
+
+/** The planning lines that can be mapped: every section line and match per paycheck, and what's left over. */
+export function paymentSources(
+  plans: PaycheckPlan[],
+  sections: PlanningSection[],
+  totals: PlanningTotals,
+): PaymentSource[] {
+  return [
+    ...plans.flatMap((plan) =>
+      plan.sections.flatMap((sectionPlan) => {
+        const section = sections.find((candidate) => candidate.id === sectionPlan.sectionId);
+        return [
+          ...sectionPlan.lines.map((line) => ({
+            key: line.key,
+            name: `${plan.name} ${line.name}`,
+            color: plan.color,
+            amount: line.value,
+          })),
+          ...(section && sectionPlan.matchAmount > 0
+            ? [
+                {
+                  key: matchKey(section.id, plan.paycheckId),
+                  name: `${plan.name} ${section.name} match`,
+                  color: plan.color,
+                  amount: sectionPlan.matchAmount,
+                },
+              ]
+            : []),
+        ];
+      }),
+    ),
+    { key: NET_INCOME_SOURCE, name: "Net income", color: "#8b93a1", amount: Math.max(0, totals.remaining) },
+  ];
+}
+
+/** Which account each source is mapped to, ignoring mappings to accounts that no longer exist. */
+export function paymentMapping(
+  sources: PaymentSource[],
+  settings: Map<string, string>,
+  accountIds: Set<string>,
+): Map<string, string> {
+  const mapping = new Map<string, string>();
+  for (const source of sources) {
+    const accountId = settings.get(paymentKey(source.key));
+    if (accountId && accountIds.has(accountId)) {
+      mapping.set(source.key, accountId);
+    }
+  }
+  return mapping;
+}
+
+/** The yearly payment into each account: the sum of the sources mapped to it. */
+export function paymentsByAccount(sources: PaymentSource[], mapping: Map<string, string>): Record<string, number> {
+  const payments: Record<string, number> = {};
+  for (const source of sources) {
+    const accountId = mapping.get(source.key);
+    if (accountId) {
+      payments[accountId] = round2((payments[accountId] ?? 0) + source.amount);
+    }
+  }
+  return payments;
+}

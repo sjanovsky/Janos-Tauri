@@ -298,3 +298,21 @@
   font-size: 0.85rem;
   pointer-events: none;
 }
+
+.forecast-payment {
+  display: block;
+  margin-left: 18px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.forecast-controls {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.forecast-input.forecast-mode {
+  width: auto;
+}

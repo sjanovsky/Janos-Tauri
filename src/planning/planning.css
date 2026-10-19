@@ -53,6 +53,10 @@
 }
 
 .planning-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 0.9rem;
 }
 
@@ -265,4 +269,183 @@
   align-items: center;
   gap: 0.25rem;
   margin-left: 0.75rem;
+}
+
+/* --- Cash Flow table look ---
+   Each section takes its Cash Flow group's color (set inline as --bucket): line items are lightly
+   tinted, the section total is bold and framed top and bottom, and a divider runs down every
+   value column, like the Cash Flow table. */
+.planning-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.planning-table th,
+.planning-table td {
+  padding: 0.2rem 0.65rem;
+  height: 2.7rem;
+  color: #52514e;
+}
+
+.planning-table td {
+  border-left: 1px solid #e1e0d9;
+}
+
+.planning-table thead th:not(:first-child) {
+  border-left: 1px solid #e1e0d9;
+}
+
+.planning-table tr.planning-tinted > th,
+.planning-table tr.planning-tinted > td {
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 10%, white);
+  color: #1f2937;
+  font-weight: 400;
+}
+
+.planning-table tr.planning-tinted > th[scope="row"] {
+  padding-left: 0.6rem;
+}
+
+.planning-table tr.planning-tinted.planning-muted > th,
+.planning-table tr.planning-tinted.planning-muted > td {
+  color: #6b6a66;
+}
+
+.planning-table tr.planning-tinted.planning-sum > th,
+.planning-table tr.planning-tinted.planning-sum > td {
+  border-top: 0;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white),
+    inset 0 -1px 0 color-mix(in srgb, var(--bucket, #d1d5db) 35%, white);
+  color: #111827;
+  font-weight: 700;
+}
+
+/* A hint is part of the line above it, so it carries no row height of its own. */
+.planning-table tr.planning-hint > th,
+.planning-table tr.planning-hint > td {
+  height: auto;
+  color: #6b6a66;
+}
+
+.planning-table tr.planning-tinted > td.planning-total {
+  background: color-mix(in srgb, var(--bucket, #d1d5db) 16%, white);
+}
+
+/* Section labels sit in the gap above each band, in the Cash Flow label style. */
+.planning-section th {
+  height: auto;
+  padding-top: 0.9rem;
+  padding-bottom: 0.2rem;
+  border-left: 0;
+}
+
+/* The bottom line (Left over) is neutral, like the Cash Flow net income row. */
+.planning-table tr.planning-sum:not(.planning-tinted) > th,
+.planning-table tr.planning-sum:not(.planning-tinted) > td {
+  border-top: 1px solid #e1e0d9;
+  color: #374151;
+  font-weight: 700;
+}
+
+/* --- Fields blend into their row --- */
+.planning-table tr.planning-tinted .planning-field {
+  border-color: color-mix(in srgb, var(--bucket, #d1d5db) 40%, white);
+  background: transparent;
+}
+
+.planning-table tr.planning-tinted .planning-field:focus-within,
+.planning-table tr.planning-tinted .planning-field--overridden {
+  border-color: #4f46e5;
+}
+
+/* --- Gaps between sections and one-line footnotes --- */
+.planning-gap td {
+  height: 0.9rem;
+  padding: 0;
+  border-left: 0;
+}
+
+.planning-table tr.planning-footnote > td {
+  height: auto;
+  padding: 0.25rem 0.6rem 0;
+  border-left: 0;
+  color: #6b6a66;
+  font-size: 0.72rem;
+  text-align: left;
+}
+
+.planning-footnote button {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: #4f46e5;
+  font: inherit;
+  cursor: pointer;
+}
+
+.planning-footnote button:hover {
+  text-decoration: underline;
+}
+
+/* Spending and Left over have a single value, so no column dividers. */
+.planning-table tr.planning-flat > td {
+  border-left: 0;
+}
+
+.planning-payments {
+  margin-top: 16px;
+}
+
+.planning-payments__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.planning-payments__empty {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.planning-settings__match {
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.planning-settings__match legend {
+  padding: 0 0.3rem;
+  font-weight: 600;
+}
+
+.planning-settings__match p {
+  margin: 0 0 0.4rem;
+  color: #6b7280;
+}
+
+.planning-settings__match label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 1rem;
+}
+
+.planning-settings__addback {
+  margin: 0.75rem 0;
+}
+
+.planning-payments__addbacks {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.planning-payments__addback {
+  flex: 1;
+  min-width: 0;
 }

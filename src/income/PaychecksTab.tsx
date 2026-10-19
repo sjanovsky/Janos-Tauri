@@ -1,4 +1,10 @@
-import { useState, type MouseEvent, type ReactNode } from "react";
+import {
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
+import { softenColor } from "../spending/lib/categories";
 import NumberField from "../taxes/NumberField";
 import type { ImportedTransaction } from "../upload/lib/csvParser";
 import LineItemsManager from "./LineItemsManager";
@@ -137,7 +143,12 @@ function PaychecksTab({
   onMoveBucket,
   check,
 }: PaychecksTabProps) {
-  const [editing, setEditing] = useState(false);
+  const [editRequested, setEditing] = useState(false);
+  // Show each paycheck's numbers as entered, or scaled up by its paychecks per year.
+  const [period, setPeriod] = useState<"paycheck" | "year">("paycheck");
+  const yearly = period === "year";
+  // The yearly view is read-only; the numbers are entered per paycheck.
+  const editing = editRequested && !yearly;
   const [managingItems, setManagingItems] = useState(false);
   // Which version each paycheck's column is showing; unset means its current one.
   const [viewing, setViewing] = useState<Record<string, string>>({});
@@ -202,7 +213,14 @@ function PaychecksTab({
       })
       .filter((entry) => !entry.ok)
       .sort((a, b) => b.deposit.date.localeCompare(a.deposit.date));
-    return { paycheck, current, shown, count: mine.length, off };
+    return {
+      paycheck,
+      current,
+      shown,
+      count: mine.length,
+      off,
+      scale: yearly ? paycheck.paychecksPerYear : 1,
+    };
   });
 
   const versionLabel = (version: PaycheckVersionRecord) => {
@@ -247,6 +265,7 @@ function PaychecksTab({
       (from ? onAddVersion(paycheck.id, "", from.id, deposit.id) : null);
     if (id) {
       showVersion(paycheck.id, id);
+      setPeriod("paycheck");
       setEditing(true);
     }
   };
@@ -283,12 +302,28 @@ function PaychecksTab({
         </span>
       )}
       <div className="pgrid__toolbar-actions">
+        <div className="pgrid__period" role="group" aria-label="Amounts shown">
+          {(["paycheck", "year"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={period === value ? "pgrid__period--on" : ""}
+              aria-pressed={period === value}
+              onClick={() => setPeriod(value)}
+            >
+              {value === "paycheck" ? "Paycheck" : "Year"}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           className={`pgrid__edit ${editing ? "pgrid__edit--on" : ""}`}
           aria-pressed={editing}
           title="Edit amounts and dates"
-          onClick={() => setEditing((current) => !current)}
+          onClick={() => {
+            setPeriod("paycheck");
+            setEditing(!editing);
+          }}
         >
           {editing ? "Done" : "Edit"}
         </button>
@@ -531,7 +566,7 @@ function PaychecksTab({
                 <th className="pgrid__label" scope="row">
                   Gross income
                 </th>
-                {cellsFor(({ shown }) =>
+                {cellsFor(({ shown, scale }) =>
                   editing ? (
                     <NumberField
                       ariaLabel="Gross income"
@@ -544,7 +579,9 @@ function PaychecksTab({
                       }}
                     />
                   ) : (
-                    <span className="pgrid__value">{money(shown.gross)}</span>
+                    <span className="pgrid__value">
+                      {money(shown.gross * scale)}
+                    </span>
                   ),
                 )}
               </tr>
@@ -566,9 +603,9 @@ function PaychecksTab({
                 <th className="pgrid__label" scope="row">
                   Net pay
                 </th>
-                {cellsFor(({ shown }) => (
+                {cellsFor(({ shown, scale }) => (
                   <span className="pgrid__value">
-                    {money(expectedNet(shown, items))}
+                    {money(expectedNet(shown, items) * scale)}
                   </span>
                 ))}
               </tr>
@@ -742,6 +779,8 @@ function PaychecksTab({
 type Column = {
   paycheck: PaycheckRecord;
   shown: PaycheckVersionRecord;
+  // What the amounts are multiplied by: 1 per paycheck, its paychecks per year for a year.
+  scale: number;
 };
 
 type SectionProps = {
@@ -769,20 +808,19 @@ function SectionRows({
   selectedPaycheckId,
   onSelectColumn,
 }: SectionProps) {
+  const tint = { "--bucket": softenColor(section.color) } as CSSProperties;
   return (
     <>
-      <tr className="pgrid__bucket" style={{ borderTopColor: section.color }}>
-        <th colSpan={colCount} scope="colgroup">
-          <span className="pgrid__bucket-name">{section.name}</span>
-        </th>
+      <tr className="pgrid__gap" aria-hidden="true">
+        <td colSpan={colCount} />
       </tr>
 
       {section.items.map((item) => (
-        <tr key={item.id}>
+        <tr key={item.id} className="pgrid__item" style={tint}>
           <th className="pgrid__label" scope="row">
             {item.label}
           </th>
-          {columns.map(({ paycheck, shown }) => (
+          {columns.map(({ paycheck, shown, scale }) => (
             <td
               key={paycheck.id}
               className={`pgrid__cell pgrid__cell--pick ${selectedPaycheckId === paycheck.id ? "pgrid__cell--selected" : ""}`}
@@ -803,7 +841,7 @@ function SectionRows({
                 <span className="pgrid__value">
                   {paycheckItemAmount(shown, item.id) === 0
                     ? "—"
-                    : money(paycheckItemAmount(shown, item.id))}
+                    : money(paycheckItemAmount(shown, item.id) * scale)}
                 </span>
               )}
             </td>
@@ -812,18 +850,18 @@ function SectionRows({
       ))}
 
       {section.items.length === 0 && (
-        <tr>
+        <tr className="pgrid__item" style={tint}>
           <td colSpan={colCount} className="pgrid__muted pgrid__none">
             No line items
           </td>
         </tr>
       )}
 
-      <tr className="pgrid__subtotal">
+      <tr className="pgrid__subtotal" style={tint}>
         <th className="pgrid__label" scope="row">
-          {section.name} subtotal
+          {section.name}
         </th>
-        {columns.map(({ paycheck, shown }) => (
+        {columns.map(({ paycheck, shown, scale }) => (
           <td
               key={paycheck.id}
               className={`pgrid__cell pgrid__cell--pick ${selectedPaycheckId === paycheck.id ? "pgrid__cell--selected" : ""}`}
@@ -834,7 +872,7 @@ function SectionRows({
                 paycheckSubtotal(
                   shown,
                   section.items.map((item) => item.id),
-                ),
+                ) * scale,
               )}
             </span>
           </td>

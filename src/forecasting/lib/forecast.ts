@@ -31,6 +31,8 @@ export type ForecastAccountRow = {
   mid: number[];
   high: number[];
   rate: RateRange;
+  // Yearly payment added to the account (from Planning), 0 when none is mapped.
+  payment: number;
 };
 
 export type ForecastGroup = {
@@ -61,6 +63,17 @@ export function compound(base: number, percent: number, years: number): number {
   return base * (1 + percent / 100) ** years;
 }
 
+// Compound `base` for each of `years` years at `percent`, adding `payment` at the end of each year.
+export function projectWithPayments(base: number, percent: number, payment: number, years: number): number[] {
+  const values: number[] = [];
+  let balance = base;
+  for (let index = 0; index < years; index += 1) {
+    balance = balance * (1 + percent / 100) + payment;
+    values.push(balance);
+  }
+  return values;
+}
+
 export function buildForecast(
   buckets: NetWorthBucketRecord[],
   accounts: AccountRecord[],
@@ -69,6 +82,8 @@ export function buildForecast(
   yearsToForecast: number,
   // Per-account overrides; accounts without one get the asset/liability default by sign of balance.
   rates: Record<string, RateRange>,
+  // Yearly payment per account id, added at the end of every forecast year.
+  payments: Record<string, number> = {},
 ): ForecastResult {
   const years = yearsFromMonths(balances.map((balance) => balance.month));
   const spans = yearViewMonths(years, nowMonth);
@@ -94,7 +109,8 @@ export function buildForecast(
       const base = historic.length > 0 ? (historic[historic.length - 1] ?? 0) : 0;
       const rate = normalizeRate(rates[account.accountId] ?? (base < 0 ? DEFAULT_LIABILITY_RATE : DEFAULT_ASSET_RATE));
       const mid = (rate.low + rate.high) / 2;
-      const project = (percent: number) => forecastYears.map((_, index) => compound(base, percent, index + 1));
+      const payment = payments[account.accountId] ?? 0;
+      const project = (percent: number) => projectWithPayments(base, percent, payment, forecastYears.length);
       const low = project(rate.low);
       const midValues = project(mid);
       const high = project(rate.high);
@@ -103,7 +119,7 @@ export function buildForecast(
         netMid[index] += midValues[index] ?? 0;
         netHigh[index] += high[index] ?? 0;
       }
-      return { accountId: account.accountId, name: account.name, historic, low, mid: midValues, high, rate };
+      return { accountId: account.accountId, name: account.name, historic, low, mid: midValues, high, rate, payment };
     }),
   }));
 

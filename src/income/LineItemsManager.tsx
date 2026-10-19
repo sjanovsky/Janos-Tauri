@@ -598,14 +598,13 @@ function LineItemsManager({
                     <th>Paycheck</th>
                     <th>Transaction description contains</th>
                     <th>Paychecks per year</th>
-                    <th>Extra income per year</th>
                     <th aria-label="Delete" />
                   </tr>
                 </thead>
                 <tbody>
                   {paychecks.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="income-settings__empty">
+                      <td colSpan={4} className="income-settings__empty">
                         No paychecks yet.
                       </td>
                     </tr>
@@ -666,27 +665,6 @@ function LineItemsManager({
                               }
                             } else {
                               event.target.value = String(paycheck.paychecksPerYear);
-                            }
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="income-settings__text"
-                          type="number"
-                          min={0}
-                          step="any"
-                          aria-label={`${paycheck.name} extra income per year`}
-                          placeholder="Bonus, commission"
-                          defaultValue={paycheck.extraIncome === 0 ? "" : paycheck.extraIncome}
-                          onBlur={(event) => {
-                            const amount = event.target.value === "" ? 0 : Number(event.target.value);
-                            if (Number.isFinite(amount) && amount >= 0) {
-                              if (amount !== paycheck.extraIncome) {
-                                onUpdatePaycheck(paycheck.id, { extraIncome: amount });
-                              }
-                            } else {
-                              event.target.value = paycheck.extraIncome === 0 ? "" : String(paycheck.extraIncome);
                             }
                           }}
                         />

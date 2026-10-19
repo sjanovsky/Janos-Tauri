@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { computeDivergingScale } from "../spending/lib/chartScale";
 import NetWorthChart from "./NetWorthChart";
 import { useNetWorthAccounts } from "./lib/useNetWorthAccounts";
+import { useNetWorthCashFlow } from "./lib/useNetWorthCashFlow";
 import NetWorthManageModal, { type NetWorthManageTab } from "./NetWorthManageModal";
 import { type ImportPayload } from "./NetWorthImportModal";
 import {
@@ -161,6 +162,27 @@ function NetWorthPage() {
 
   const hasData = balances.length > 0;
 
+  // Actual income and expenses under the Net worth row. A month column shows that month; a Years
+  // column shows its calendar year up to that column's month (so the current year is year-to-date).
+  const monthlyCashFlow = useNetWorthCashFlow();
+  const cashFlowPerColumn = useMemo(
+    () =>
+      columns.map((column) => {
+        const end = column.key;
+        const start = range === "year" ? `${end.slice(0, 4)}-01` : end;
+        let income = 0;
+        let expenses = 0;
+        monthlyCashFlow.forEach((value, month) => {
+          if (month >= start && month <= end) {
+            income += value.income;
+            expenses += value.expenses;
+          }
+        });
+        return { income, expenses, net: income - expenses };
+      }),
+    [columns, range, monthlyCashFlow],
+  );
+
   const accountsProps = useNetWorthAccounts({
     buckets,
     setBuckets,
@@ -306,6 +328,7 @@ function NetWorthPage() {
             scale={scale}
             groups={gridGroups}
             netPerColumn={gridNetPerColumn}
+            cashFlowPerColumn={cashFlowPerColumn}
             onRangeChange={setRange}
             onSetBalance={handleSetBalance}
             onEditMonth={handleEditMonth}
