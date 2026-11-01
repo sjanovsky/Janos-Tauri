@@ -280,6 +280,48 @@ body,
   font-size: 0.78rem;
 }
 
+.custom-import__duplicates-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.82rem;
+}
+
+.custom-import__duplicate-row td {
+  background: #fef3c7;
+}
+
+.custom-import__duplicate-row--removed td {
+  background: transparent;
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.custom-import__duplicate-icon {
+  width: 1.6rem;
+  color: #b45309;
+}
+
+.custom-import__duplicate-remove {
+  border: none;
+  background: none;
+  color: #b91c1c;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.custom-import__duplicate-remove:hover {
+  text-decoration: underline;
+}
+
 .custom-import__fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -1258,6 +1300,59 @@ body,
 .import-shell__bulk-secondary:disabled {
   color: #a5b4fc;
   cursor: not-allowed;
+}
+
+.import-shell__bulk-danger {
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  background: white;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.import-shell__bulk-danger:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
+.import-shell__bulk-danger:disabled {
+  color: #fca5a5;
+  cursor: not-allowed;
+}
+
+.import-shell__bulk-danger--solid {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: white;
+}
+
+.import-shell__bulk-danger--solid:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.confirm-dialog {
+  padding: 0.5rem 0.25rem 0;
+  max-width: 26rem;
+}
+
+.confirm-dialog__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.confirm-dialog__body {
+  margin: 0 0 1.25rem;
+  color: #4b5563;
+  font-size: 0.9rem;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .import-shell__bulk-select {
@@ -2434,6 +2529,13 @@ textarea.bucket-row__name {
   overflow-y: auto;
 }
 
+/* The page (.networth-layout) is the only vertical scroller. The chart's horizontal scroller must not
+   scroll vertically too (overflow-x: auto otherwise makes it do so), or its rows slide out of line
+   with the fixed labels beside them. */
+.networth-layout .import-shell__chart-scroll {
+  overflow-y: hidden;
+}
+
 /* A net-worth tooltip adds a "Net worth" summary line under the bucket rows. */
 .import-shell__tooltip-row--net {
   margin-top: 0.25rem;
@@ -3457,4 +3559,88 @@ textarea.bucket-row__name {
 
 .networth-cashflow--net .import-shell__totals-cell {
   font-weight: 700;
+}
+
+/* Reset amount row: the bucket picker and amount input live in the row's label. */
+.networth-reset-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.networth-reset-select {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid color-mix(in srgb, #64748b 35%, white);
+  border-radius: 6px;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+/* A month's reset amount: it reads like the other cells until focused. A month with no amount of its
+   own shows the inherited one as the (grey) placeholder. */
+.networth-reset-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0.1rem 0.2rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  text-align: center;
+}
+
+.networth-reset-input::placeholder {
+  color: #94a3b8;
+}
+
+.networth-reset-input:hover,
+.networth-reset-input:focus {
+  border-color: color-mix(in srgb, #64748b 45%, white);
+  outline: none;
+}
+
+/* Transfer cells: the match icon sits just left of the amount. */
+.networth-transfer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+}
+
+.networth-match-icon {
+  flex-shrink: 0;
+}
+
+.networth-match-icon--ok {
+  color: #16a34a;
+}
+
+.networth-match-icon--bad {
+  color: #dc2626;
+}
+
+/* The reset check is its own block under Net worth, in a neutral tint so it reads apart from the
+   blue Income block below it. */
+.networth-cashflow-label.networth-cashflow--reset,
+.networth-cashflow-row.networth-cashflow--reset {
+  background: color-mix(in srgb, #64748b 9%, white);
+}
+
+.networth-cashflow--reset.networth-cashflow--start {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #64748b 35%, white);
+}
+
+.networth-cashflow--end {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, #64748b 35%, white);
+}
+
+.networth-cashflow-row.networth-cashflow--reset .import-shell__totals-cell {
+  color: #334155;
 }

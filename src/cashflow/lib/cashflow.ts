@@ -43,6 +43,7 @@ import {
 } from "./groups";
 
 export const GROSS_SEGMENT_ID = "cf:gross";
+const DEPOSIT_SEGMENT_ID = "cf:deposit";
 export const withheldSegmentId = (bucketId: string) => `cf:withheld:${bucketId}`;
 export const spendingSegmentId = (key: string) => `cf:spending:${key}`;
 export const LEFTOVER_SEGMENT_ID = "cf:leftover";
@@ -100,6 +101,9 @@ export type CashFlowResult = {
   series: CashFlowPoint[];
   // Gross income, then a row per group with money in it (its buckets as children), in order.
   rows: CashFlowRow[];
+  // What actually landed in the bank per period: the paycheck deposits themselves (take-home pay,
+  // not gross). Not part of the bars or rows.
+  depositPerColumn: number[];
   // Net income per period: gross minus every group. Zero once Leftover is in a group.
   netPerColumn: number[];
   // Which original transactions feed each row id (groups and buckets), for filtering the list.
@@ -141,6 +145,7 @@ export function buildCashFlow(input: CashFlowInput): CashFlowResult {
         continue;
       }
       feed(GROSS_SEGMENT_ID, source, version.gross, "gross");
+      feed(DEPOSIT_SEGMENT_ID, source, source.amount, "deposit");
       for (const { itemId, amount } of version.values) {
         const item = itemById.get(itemId);
         if (!item || amount <= 0) {
@@ -211,7 +216,7 @@ export function buildCashFlow(input: CashFlowInput): CashFlowResult {
   const points = buildChartSeries(
     synthetic,
     input.range,
-    [GROSS_SEGMENT_ID, ...leaves.map((leaf) => leaf.id)],
+    [GROSS_SEGMENT_ID, DEPOSIT_SEGMENT_ID, ...leaves.map((leaf) => leaf.id)],
   );
   const columns = points.length;
   const valueOf = (point: (typeof points)[number], id: string) =>
@@ -321,5 +326,5 @@ export function buildCashFlow(input: CashFlowInput): CashFlowResult {
   const allTransactionIds = new Set<string>();
   transactionIds.forEach((ids) => ids.forEach((id) => allTransactionIds.add(id)));
 
-  return { series, rows, netPerColumn, transactionIds: rowTransactionIds, allTransactionIds };
+  return { series, rows, depositPerColumn: points.map((point) => valueOf(point, DEPOSIT_SEGMENT_ID)), netPerColumn, transactionIds: rowTransactionIds, allTransactionIds };
 }

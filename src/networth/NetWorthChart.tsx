@@ -39,15 +39,63 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => ({
   label: new Date(2000, index, 1).toLocaleString(undefined, { month: "short" }),
 }));
 
-const CASH_FLOW_ROWS = [
-  { key: "income", label: "Income" },
-  { key: "expenses", label: "Expenses" },
-  { key: "net", label: "Net income" },
-] as const;
+// A row under Net worth: Income, one per Cash Flow group, then Net income. Values are per column.
+export type CashFlowRowData = {
+  key: string;
+  label: string;
+  kind: "income" | "group" | "reset" | "transfer" | "net";
+  // null leaves the cell empty.
+  values: (number | null)[];
+  // Transfer row only: whether each column's value equals Net income (null: nothing to judge).
+  matches?: (boolean | null)[];
+};
 
-// Income starts the tinted block (with a gap above it); Net income closes it, bold under a divider.
-const cashFlowRowClass = (key: (typeof CASH_FLOW_ROWS)[number]["key"]) =>
-  key === "income" ? "networth-cashflow--start" : key === "net" ? "networth-cashflow--net" : "";
+// The month-end reset controls: a bucket picker in the Reset amount row's label and an amount
+// input in each month's cell.
+export type ResetControls = {
+  bucketId: string | null;
+  bucketOptions: { id: string; name: string }[];
+  onBucketChange: (id: string) => void;
+  // What was typed for a month ("" when that month uses the one before it).
+  textFor: (month: string) => string;
+  onTextChange: (month: string, text: string) => void;
+  onTextCommit: (month: string) => void;
+};
+
+// The reset check (Reset amount, Transfer) is its own tinted block under Net worth. Income starts the
+// next block (with a gap above it); Net income closes it, bold under a divider.
+const cashFlowRowClass = (kind: CashFlowRowData["kind"]) =>
+  kind === "income" || kind === "reset"
+    ? `networth-cashflow--start${kind === "reset" ? " networth-cashflow--reset" : ""}`
+    : kind === "transfer"
+      ? "networth-cashflow--reset networth-cashflow--end"
+      : kind === "net"
+        ? "networth-cashflow--net"
+        : "";
+
+// Filled circle with a check (the transfer matches Net income) or an X (it doesn't).
+function MatchIcon({ ok }: { ok: boolean }) {
+  return (
+    <svg
+      className={`networth-match-icon ${ok ? "networth-match-icon--ok" : "networth-match-icon--bad"}`}
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      role="img"
+      aria-label={ok ? "Matches Net income" : "Doesn't match Net income"}
+    >
+      <circle cx="8" cy="8" r="8" fill="currentColor" />
+      <path
+        d={ok ? "M4.5 8.3l2.3 2.3 4.7-4.9" : "M5.3 5.3l5.4 5.4M10.7 5.3l-5.4 5.4"}
+        fill="none"
+        stroke="#fff"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 type TooltipAnchor = { point: NetWorthPoint; x: number; y: number; bucketId: string | null };
 
@@ -64,8 +112,9 @@ type NetWorthChartProps = {
   scale: DivergingScale;
   groups: BucketGroup[];
   netPerColumn: number[];
-  // Actual income, expenses and net income per column, shown beneath the Net worth row.
-  cashFlowPerColumn: { income: number; expenses: number; net: number }[];
+  // Actual income, money out per Cash Flow group and net income, shown beneath the Net worth row.
+  cashFlowRows: CashFlowRowData[];
+  reset: ResetControls;
   onRangeChange: (range: NetWorthRange) => void;
   // Commit an edited cell: a number sets/updates the balance, null clears it (back to carried).
   onSetBalance: (accountId: string, month: string, amount: number | null) => void;
@@ -106,7 +155,8 @@ function NetWorthChart({
   scale,
   groups,
   netPerColumn,
-  cashFlowPerColumn,
+  cashFlowRows,
+  reset,
   onRangeChange,
   onSetBalance,
   onEditMonth,
@@ -118,15 +168,6 @@ function NetWorthChart({
   // Which column's date is currently being edited (its header shows the month picker).
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // When the columns overflow horizontally, start scrolled to the far right so the most recent
-  // months are visible. Re-applied when the range switches or the column count changes.
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (el) {
-      el.scrollLeft = el.scrollWidth;
-    }
-  }, [range, columns.length, hasAccounts]);
 
   // The width every column gets: just enough for the widest value shown anywhere in the grid
   // (account balances, bucket totals, and the Net worth row). In month view columns hold exactly
@@ -160,15 +201,31 @@ function NetWorthChart({
         consider(value);
       }
     });
-    cashFlowPerColumn.forEach(({ income, expenses, net }) => {
-      [income, expenses, net].forEach((value) => {
-        if (value !== 0) {
+    cashFlowRows.forEach(({ kind, values }) => {
+      values.forEach((value) => {
+        if (value === null || value === 0) {
+          return;
+        }
+        if (kind === "transfer" || kind === "net") {
+          // Shown with cents (plus the match icon on Transfer): budget for the longer text.
+          widest = Math.max(widest, currencyFormatter.format(value).length + (kind === "transfer" ? 3 : 0));
+        } else {
           consider(value);
         }
       });
     });
     return Math.max(MIN_COLUMN_BASIS, Math.ceil(widest * CHAR_WIDTH_PX) + COLUMN_PADDING_PX);
-  }, [groups, netPerColumn, cashFlowPerColumn]);
+  }, [groups, netPerColumn, cashFlowRows]);
+
+  // When the columns overflow horizontally, start scrolled to the far right so the most recent
+  // months are visible. Re-applied when the range switches or the column count or width changes
+  // (cash flow rows load after the first render and can widen the columns).
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollLeft = el.scrollWidth;
+    }
+  }, [range, columns.length, hasAccounts, columnBasis]);
 
   const isYear = range === "year";
 
@@ -375,9 +432,27 @@ function NetWorthChart({
                   <GroupLabels key={group.meta.id} group={group} />
                 ))}
                 <div className="import-shell__totals-label import-shell__totals-label--net">Net worth</div>
-                {CASH_FLOW_ROWS.map(({ key, label }) => (
-                  <div key={key} className={`import-shell__totals-label networth-cashflow-label ${cashFlowRowClass(key)}`}>
-                    {label}
+                {cashFlowRows.map(({ key, label, kind }) => (
+                  <div key={key} className={`import-shell__totals-label networth-cashflow-label ${cashFlowRowClass(kind)}`}>
+                    {kind === "reset" ? (
+                      <span className="networth-reset-controls">
+                        <select
+                          className="networth-reset-select"
+                          aria-label="Bucket to reset"
+                          value={reset.bucketId ?? ""}
+                          onChange={(event) => reset.onBucketChange(event.target.value)}
+                        >
+                          {reset.bucketId === null && <option value="">Pick bucket</option>}
+                          {reset.bucketOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.name} reset
+                            </option>
+                          ))}
+                        </select>
+                      </span>
+                    ) : (
+                      label
+                    )}
                   </div>
                 ))}
               </div>
@@ -546,16 +621,51 @@ function NetWorthChart({
                       </div>
                     ))}
                   </div>
-                  {CASH_FLOW_ROWS.map(({ key }) => (
-                    <div key={key} className={`import-shell__totals-row networth-cashflow-row ${cashFlowRowClass(key)}${pinnedRowClass}`}>
+                  {cashFlowRows.map(({ key, kind, values, matches }) => (
+                    <div key={key} className={`import-shell__totals-row networth-cashflow-row ${cashFlowRowClass(kind)}${pinnedRowClass}`}>
                       {isYear && <span className="networth-row-strut" aria-hidden="true" />}
-                      {cashFlowPerColumn.map((values, index) => (
+                      {values.map((value, index) => (
                         <div
                           key={columns[index].key}
                           className="import-shell__totals-cell networth-readonly-cell"
                           style={cellStyle(columns[index])}
                         >
-                          {values[key] === 0 ? "—" : wholeCurrencyFormatter.format(values[key])}
+                          {value === null ? (
+                            "—"
+                          ) : kind === "reset" ? (
+                            columns[index].month ? (
+                              <input
+                                className="networth-reset-input"
+                                type="text"
+                                inputMode="decimal"
+                                aria-label={`Reset amount for ${columns[index].label}`}
+                                placeholder={value === 0 ? "Amount" : wholeCurrencyFormatter.format(value)}
+                                value={reset.textFor(columns[index].month!)}
+                                onChange={(event) => reset.onTextChange(columns[index].month!, event.target.value)}
+                                onBlur={() => reset.onTextCommit(columns[index].month!)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.currentTarget.blur();
+                                  }
+                                }}
+                              />
+                            ) : value === 0 ? (
+                              "—"
+                            ) : (
+                              wholeCurrencyFormatter.format(value)
+                            )
+                          ) : value === 0 ? (
+                            "—"
+                          ) : kind === "transfer" ? (
+                            <span className="networth-transfer">
+                              {matches?.[index] != null && <MatchIcon ok={matches[index] === true} />}
+                              {currencyFormatter.format(value)}
+                            </span>
+                          ) : kind === "net" ? (
+                            currencyFormatter.format(value)
+                          ) : (
+                            wholeCurrencyFormatter.format(value)
+                          )}
                         </div>
                       ))}
                     </div>

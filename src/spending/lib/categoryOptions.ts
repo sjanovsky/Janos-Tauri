@@ -6,7 +6,8 @@ export type CategoryOptionGroup = {
 };
 
 // Groups the categories shown in a per-row category picker under their bucket, in bucket order,
-// with excluded categories left out, Unclassified in its own group and anything unbucketed last.
+// with excluded categories in their own "Excluded" group (still assignable), Unclassified in its
+// own group and anything unbucketed last.
 export function buildCategoryOptionsByBucket(
   categoryList: string[],
   categoryRecords: CategoryRecord[],
@@ -21,7 +22,7 @@ export function buildCategoryOptionsByBucket(
     const grouped = new Map<string, { bucketLabel: string; options: { value: string; label: string }[] }>();
 
     const addOption = (bucketId: string | null, bucketLabel: string, category: string) => {
-      const target = bucketId && bucketOrder.has(bucketId) ? bucketId : "__ungrouped";
+      const target = bucketId === "__excluded" || (bucketId && bucketOrder.has(bucketId)) ? bucketId : "__ungrouped";
       const existing = grouped.get(target) ?? { bucketLabel, options: [] };
       existing.options.push({ value: category, label: getCategoryLabel(category) });
       grouped.set(target, existing);
@@ -31,6 +32,7 @@ export function buildCategoryOptionsByBucket(
     Array.from(new Set(categoryList)).forEach((category) => {
       const record = categoryRecords.find((item) => item.id === category);
       if (record?.excluded) {
+        addOption("__excluded", "Excluded", category);
         return;
       }
 
@@ -50,8 +52,14 @@ export function buildCategoryOptionsByBucket(
     }));
 
     orderedGroups.sort((a, b) => {
-      const aIndex = a.bucketId === "__ungrouped" ? Number.MAX_SAFE_INTEGER : bucketOrder.get(a.bucketId)?.index ?? Number.MAX_SAFE_INTEGER;
-      const bIndex = b.bucketId === "__ungrouped" ? Number.MAX_SAFE_INTEGER : bucketOrder.get(b.bucketId)?.index ?? Number.MAX_SAFE_INTEGER;
+      const rank = (id: string | null) =>
+        id === "__excluded"
+          ? Number.MAX_SAFE_INTEGER
+          : id === "__ungrouped"
+            ? Number.MAX_SAFE_INTEGER - 1
+            : bucketOrder.get(id ?? "")?.index ?? Number.MAX_SAFE_INTEGER - 1;
+      const aIndex = rank(a.bucketId);
+      const bIndex = rank(b.bucketId);
       return aIndex - bIndex;
     });
 

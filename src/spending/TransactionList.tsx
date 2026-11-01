@@ -13,6 +13,7 @@ import {
 } from "./lib/banks";
 import { accountingCurrencyFormatter } from "./lib/format";
 import { parseDate } from "./lib/transactionSummary";
+import Modal from "./Modal";
 import MultiSelectFilter from "./MultiSelectFilter";
 
 export type SortKey = "date" | "description" | "bank" | "amount" | "category";
@@ -89,6 +90,8 @@ type TransactionListProps = {
   onBulkCategoryChange: (transactionIds: string[], category: Category) => void;
   // Multiply the amount of many transactions by -1 at once (bulk update).
   onBulkFlipSign: (transactionIds: string[]) => void;
+  // Permanently delete many transactions at once; the list asks the user to confirm first.
+  onBulkDelete: (transactionIds: string[]) => void;
   // When given, transactions flagged autoCategorized are highlighted and can be confirmed
   // (marked reviewed) one at a time or all at once.
   onConfirmAutoCategorized?: (transactionIds: string[]) => void;
@@ -117,6 +120,7 @@ function TransactionList({
   onCategoryChange,
   onBulkCategoryChange,
   onBulkFlipSign,
+  onBulkDelete,
   onConfirmAutoCategorized,
 }: TransactionListProps) {
   const [search, setSearch] = useState("");
@@ -126,6 +130,7 @@ function TransactionList({
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCategory, setBulkCategory] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   // Unchecked values per filter; empty set means that field isn't narrowing anything.
   const [excludedBanks, setExcludedBanks] = useState<Set<string>>(new Set());
   const [excludedCategories, setExcludedCategories] = useState<Set<string>>(
@@ -298,6 +303,16 @@ function TransactionList({
     setBulkMode(false);
   };
 
+  const confirmBulkDelete = () => {
+    if (selectedVisibleCount > 0) {
+      onBulkDelete(selectedVisibleIds);
+    }
+    setConfirmingDelete(false);
+    setSelectedIds(new Set());
+    setBulkCategory("");
+    setBulkMode(false);
+  };
+
   const footerColSpan = SORT_COLUMNS.length - 1 + (bulkMode ? 1 : 0);
 
   const filterChip =
@@ -416,6 +431,15 @@ function TransactionList({
               title="Multiply the amount of each selected transaction by -1"
             >
               Flip +/- Sign
+            </button>
+            <button
+              type="button"
+              className="import-shell__bulk-danger"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={selectedVisibleCount === 0}
+              title="Permanently delete the selected transactions"
+            >
+              Delete
             </button>
           </div>
           </div>
@@ -664,6 +688,25 @@ function TransactionList({
           )}
         </div>
       </div>
+
+      {confirmingDelete && (
+        <Modal label="Delete transactions" onClose={() => setConfirmingDelete(false)}>
+          <div className="confirm-dialog">
+            <h2 className="confirm-dialog__title">
+              Delete {selectedVisibleCount} {selectedVisibleCount === 1 ? "transaction" : "transactions"}?
+            </h2>
+            <p className="confirm-dialog__body">This permanently removes them and can't be undone.</p>
+            <div className="confirm-dialog__actions">
+              <button type="button" className="import-shell__bulk-secondary" onClick={() => setConfirmingDelete(false)}>
+                Cancel
+              </button>
+              <button type="button" className="import-shell__bulk-danger import-shell__bulk-danger--solid" onClick={confirmBulkDelete} autoFocus>
+                Delete
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <datalist id="category-suggestions">
         {[...categoryList, ...RESERVED_CATEGORIES].map((category) => (

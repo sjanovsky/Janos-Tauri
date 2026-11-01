@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import type { ImportedTransaction } from "./lib/csvParser";
 import type { KnownCategory } from "../spending/lib/categories";
 import { normalizeBankName, type BankRecord } from "../spending/lib/banks";
@@ -9,6 +9,7 @@ import {
   parseDelimitedText,
   type ParsedTable,
 } from "./lib/genericParser";
+import { findDuplicateIndexes } from "./lib/duplicates";
 import BankSelect from "./BankSelect";
 
 const PREVIEW_ROW_LIMIT = 10;
@@ -40,11 +41,22 @@ function previewAmount(cell: string, flip: boolean): string {
   return Number.isNaN(value) ? cell : (0 - value).toFixed(2);
 }
 
+function DuplicateIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" role="img" aria-label="Possible duplicate" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+    </svg>
+  );
+}
+
 type CustomImportPanelProps = {
   // Amounts arrive already normalized: income is positive and spending negative, whatever sign the file used.
   onImport: (bankName: string, fileName: string, transactions: ImportedTransaction[]) => Promise<boolean>;
   knownCategories: KnownCategory[];
   bankRecords: BankRecord[];
+  // Already-imported transactions, used to spot incoming rows that were imported before.
+  existingTransactions: ImportedTransaction[];
 };
 
 type MappingField = "dateIndex" | "amountIndex" | "descriptionIndex" | "categoryIndex";
@@ -63,7 +75,7 @@ const EMPTY_MAPPING: ColumnMappingState = {
   categoryIndex: null,
 };
 
-function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImportPanelProps) {
+function CustomImportPanel({ onImport, knownCategories, bankRecords, existingTransactions }: CustomImportPanelProps) {
   const [parsed, setParsed] = useState<ParsedTable | null>(null);
   const [sourceFileName, setSourceFileName] = useState("");
   const [pasteText, setPasteText] = useState("");
@@ -202,11 +214,12 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
     [parsed, mapping, bankName],
   );
 
-  const handleImport = async () => {
+  // The transactions the current mapping would import. The app stores income as positive and
+  // spending as negative; a file that lists expenses as positives is flipped.
+  const candidates = useMemo(() => {
     if (!parsed || mapping.dateIndex === null || mapping.amountIndex === null || mapping.descriptionIndex === null) {
-      return;
+      return [];
     }
-
     const built = buildTransactionsFromMapping(
       parsed,
       {
@@ -219,17 +232,52 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
       sourceFileName,
       knownCategories,
     );
+    return expensesNegative
+      ? built
+      : built.map((transaction) => ({ ...transaction, amount: 0 - transaction.amount }));
+  }, [parsed, mapping, bankName, sourceFileName, knownCategories, expensesNegative]);
 
-    if (built.length === 0) {
+  const duplicateIndexes = useMemo(
+    () => (bankName.trim() ? findDuplicateIndexes(candidates, existingTransactions) : new Set<number>()),
+    [candidates, existingTransactions, bankName],
+  );
+
+  // Duplicates the user has chosen to drop from this import. Reset whenever the rows change.
+  const [removedIndexes, setRemovedIndexes] = useState<Set<number>>(new Set());
+  useEffect(() => setRemovedIndexes(new Set()), [candidates]);
+
+  // Which candidate each parsed row became (rows without a valid amount are skipped on import),
+  // so duplicate flags can be shown on the matching preview row.
+  const candidateIndexByRow = useMemo(() => {
+    const result: (number | null)[] = [];
+    let next = 0;
+    parsed?.rows.forEach((row) => {
+      const valid = mapping.amountIndex !== null && !Number.isNaN(parseAmount(row[mapping.amountIndex] ?? ""));
+      result.push(valid ? next++ : null);
+    });
+    return result;
+  }, [parsed, mapping.amountIndex]);
+
+  const pendingDuplicates = Array.from(duplicateIndexes).filter((index) => !removedIndexes.has(index));
+
+  const hasDuplicates = duplicateIndexes.size > 0;
+  // Show every row once duplicates exist so none are hidden past the usual preview cutoff.
+  const previewLimit = hasDuplicates ? Infinity : PREVIEW_ROW_LIMIT;
+
+  const removeDuplicates = (indexes: number[]) =>
+    setRemovedIndexes((current) => new Set([...current, ...indexes]));
+
+  const handleImport = async () => {
+    if (candidates.length === 0) {
       setError("No rows had a valid amount in the selected column.");
       return;
     }
 
-    // The app stores income as positive and spending as negative; a file that lists expenses as
-    // positives is flipped.
-    const transactions = expensesNegative
-      ? built
-      : built.map((transaction) => ({ ...transaction, amount: 0 - transaction.amount }));
+    const transactions = candidates.filter((_, index) => !removedIndexes.has(index));
+    if (transactions.length === 0) {
+      setError("Every row was removed as a duplicate, so there's nothing to import.");
+      return;
+    }
 
     setIsImporting(true);
     try {
@@ -294,31 +342,87 @@ function CustomImportPanel({ onImport, knownCategories, bankRecords }: CustomImp
             <table className="custom-import__preview-table">
               <thead>
                 <tr>
+                  {hasDuplicates && <th aria-label="Duplicate" />}
                   {parsed.headers.map((header, index) => (
                     <th key={`${header}-${index}`}>{header}</th>
                   ))}
+                  {hasDuplicates && <th aria-label="Actions" />}
                 </tr>
               </thead>
               <tbody>
-                {parsed.rows.slice(0, PREVIEW_ROW_LIMIT).map((row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {parsed.headers.map((_, columnIndex) => (
-                      <td key={columnIndex}>
-                        {columnIndex === mapping.amountIndex
-                          ? previewAmount(row[columnIndex] ?? "", !expensesNegative)
-                          : (row[columnIndex] ?? "")}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {parsed.rows.slice(0, previewLimit).map((row, rowIndex) => {
+                  const candidateIndex = candidateIndexByRow[rowIndex];
+                  const isDuplicate = candidateIndex != null && duplicateIndexes.has(candidateIndex);
+                  const isRemoved = candidateIndex != null && removedIndexes.has(candidateIndex);
+                  const rowClass = isDuplicate
+                    ? isRemoved
+                      ? "custom-import__duplicate-row custom-import__duplicate-row--removed"
+                      : "custom-import__duplicate-row"
+                    : undefined;
+                  return (
+                    <tr key={rowIndex} className={rowClass}>
+                      {hasDuplicates && (
+                        <td className="custom-import__duplicate-icon">
+                          {isDuplicate && !isRemoved && <DuplicateIcon />}
+                        </td>
+                      )}
+                      {parsed.headers.map((_, columnIndex) => (
+                        <td key={columnIndex}>
+                          {columnIndex === mapping.amountIndex
+                            ? previewAmount(row[columnIndex] ?? "", !expensesNegative)
+                            : (row[columnIndex] ?? "")}
+                        </td>
+                      ))}
+                      {hasDuplicates && (
+                        <td>
+                          {isDuplicate && (
+                            <button
+                              type="button"
+                              className="custom-import__duplicate-remove"
+                              onClick={() =>
+                                isRemoved
+                                  ? setRemovedIndexes((current) => {
+                                      const next = new Set(current);
+                                      next.delete(candidateIndex);
+                                      return next;
+                                    })
+                                  : removeDuplicates([candidateIndex])
+                              }
+                            >
+                              {isRemoved ? "Restore" : "Remove"}
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-            {parsed.rows.length > PREVIEW_ROW_LIMIT && (
+            {parsed.rows.length > previewLimit && (
               <p className="custom-import__preview-note">
-                +{parsed.rows.length - PREVIEW_ROW_LIMIT} more row{parsed.rows.length - PREVIEW_ROW_LIMIT === 1 ? "" : "s"}
+                +{parsed.rows.length - previewLimit} more row{parsed.rows.length - previewLimit === 1 ? "" : "s"}
               </p>
             )}
           </div>
+
+          {hasDuplicates && (
+            <p className="custom-import__duplicates-note">
+              <DuplicateIcon /> Highlighted rows match transactions already imported for {bankName.trim()}.{" "}
+              {pendingDuplicates.length > 0 ? (
+                <button type="button" className="custom-import__duplicate-remove" onClick={() => removeDuplicates(pendingDuplicates)}>
+                  Remove all {pendingDuplicates.length}
+                </button>
+              ) : (
+                <>
+                  All removed from this import.{" "}
+                  <button type="button" className="custom-import__duplicate-remove" onClick={() => setRemovedIndexes(new Set())}>
+                    Restore all
+                  </button>
+                </>
+              )}
+            </p>
+          )}
 
           {importOptions}
 

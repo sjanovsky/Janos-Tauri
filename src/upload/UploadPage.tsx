@@ -247,6 +247,26 @@ function UploadPage() {
     });
   };
 
+  const handleBulkDelete = (transactionIds: string[]) => {
+    if (transactionIds.length === 0) {
+      return;
+    }
+    const previousUploads = uploads;
+    const idSet = new Set(transactionIds);
+    setUploads((current) =>
+      current.map((upload) => ({
+        ...upload,
+        transactions: upload.transactions.filter((transaction) => !idSet.has(transaction.id)),
+      })),
+    );
+
+    invoke("delete_transactions", { transactionIds }).catch((error) => {
+      console.error("Failed to delete transactions", error);
+      setDbError("Couldn't delete those transactions from the database.");
+      setUploads(previousUploads);
+    });
+  };
+
   const handleBulkFlipSign = (transactionIds: string[]) => {
     if (transactionIds.length === 0) {
       return;
@@ -418,6 +438,7 @@ function UploadPage() {
               onImport={persistUpload}
               knownCategories={knownCategories}
               bankRecords={bankRecords}
+              existingTransactions={masterTransactions}
             />
 
             <BankList
@@ -455,6 +476,7 @@ function UploadPage() {
             onCategoryChange={handleCategoryChange}
             onBulkCategoryChange={handleBulkCategoryChange}
             onBulkFlipSign={handleBulkFlipSign}
+            onBulkDelete={handleBulkDelete}
             onConfirmAutoCategorized={handleConfirmAutoCategorized}
           />
         </div>

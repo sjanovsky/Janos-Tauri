@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { computeDivergingScale } from "../spending/lib/chartScale";
-import NetWorthChart from "./NetWorthChart";
+import NetWorthChart, { type CashFlowRowData } from "./NetWorthChart";
 import { useNetWorthAccounts } from "./lib/useNetWorthAccounts";
 import { useNetWorthCashFlow } from "./lib/useNetWorthCashFlow";
+import { useNetWorthReset } from "./lib/useNetWorthReset";
 import NetWorthManageModal, { type NetWorthManageTab } from "./NetWorthManageModal";
 import { type ImportPayload } from "./NetWorthImportModal";
 import {
@@ -162,26 +163,78 @@ function NetWorthPage() {
 
   const hasData = balances.length > 0;
 
-  // Actual income and expenses under the Net worth row. A month column shows that month; a Years
-  // column shows its calendar year up to that column's month (so the current year is year-to-date).
+  // Actual paycheck deposits and total spending under the Net worth row. A month column shows that
+  // month; a Years column shows its calendar year up to that column's month (so the current year is
+  // year-to-date).
   const monthlyCashFlow = useNetWorthCashFlow();
-  const cashFlowPerColumn = useMemo(
-    () =>
-      columns.map((column) => {
-        const end = column.key;
-        const start = range === "year" ? `${end.slice(0, 4)}-01` : end;
-        let income = 0;
-        let expenses = 0;
-        monthlyCashFlow.forEach((value, month) => {
-          if (month >= start && month <= end) {
-            income += value.income;
-            expenses += value.expenses;
-          }
-        });
-        return { income, expenses, net: income - expenses };
-      }),
-    [columns, range, monthlyCashFlow],
-  );
+  const reset = useNetWorthReset(buckets);
+  const cashFlowRows = useMemo<CashFlowRowData[]>(() => {
+    const perColumn = columns.map((column) => {
+      const end = column.key;
+      const start = range === "year" ? `${end.slice(0, 4)}-01` : end;
+      let paycheck = 0;
+      let spending = 0;
+      monthlyCashFlow.forEach((value, month) => {
+        if (month >= start && month <= end) {
+          paycheck += value.paycheck;
+          spending += value.spending;
+        }
+      });
+      return { paycheck, spending };
+    });
+    const netValues = perColumn.map(({ paycheck, spending }) => paycheck - spending);
+
+    // Month-end reset check: what it took to bring the reset bucket back to the reset amount
+    // (its balance minus that amount), compared to Net income. A Years column adds up its months.
+    const cashByMonth = new Map<string, number>();
+    if (reset.bucketId) {
+      scaleSeries.forEach((point) => {
+        const segment = point.segments.find((candidate) => candidate.bucketId === reset.bucketId);
+        if (segment) {
+          cashByMonth.set(point.month, segment.value);
+        }
+      });
+    }
+    // A column with no income or spending has no Net income to check against, so it shows neither.
+    const hasNetData = perColumn.map(({ paycheck, spending }) => paycheck !== 0 || spending !== 0);
+    const transfers = columns.map((column, index) => {
+      if (!hasNetData[index]) {
+        return null;
+      }
+      const end = column.key;
+      const start = range === "year" ? `${end.slice(0, 4)}-01` : end;
+      let total = 0;
+      let found = false;
+      cashByMonth.forEach((cash, month) => {
+        const amount = reset.amountFor(month);
+        if (month >= start && month <= end && amount !== null) {
+          total += cash - amount;
+          found = true;
+        }
+      });
+      return found ? Math.round(total * 100) / 100 : null;
+    });
+    const cents = (value: number) => Math.round(value * 100);
+
+    return [
+      {
+        key: "reset",
+        label: "Reset amount",
+        kind: "reset",
+        values: columns.map((column, index) => (hasNetData[index] ? (reset.amountFor(column.key) ?? 0) : null)),
+      },
+      {
+        key: "transfer",
+        label: "Transfer",
+        kind: "transfer",
+        values: transfers,
+        matches: transfers.map((value, index) => (value === null ? null : cents(value) === cents(netValues[index]))),
+      },
+      { key: "paycheck", label: "Paycheck", kind: "income", values: perColumn.map(({ paycheck }) => paycheck) },
+      { key: "spending", label: "Spending", kind: "group", values: perColumn.map(({ spending }) => spending) },
+      { key: "net", label: "Net income", kind: "net", values: netValues },
+    ];
+  }, [columns, range, monthlyCashFlow, scaleSeries, reset.bucketId, reset.amountFor]);
 
   const accountsProps = useNetWorthAccounts({
     buckets,
@@ -328,7 +381,15 @@ function NetWorthPage() {
             scale={scale}
             groups={gridGroups}
             netPerColumn={gridNetPerColumn}
-            cashFlowPerColumn={cashFlowPerColumn}
+            cashFlowRows={cashFlowRows}
+            reset={{
+              bucketId: reset.bucketId,
+              bucketOptions: buckets.map((bucket) => ({ id: bucket.id, name: bucket.name })),
+              onBucketChange: reset.setBucketId,
+              textFor: reset.textFor,
+              onTextChange: reset.setText,
+              onTextCommit: reset.commit,
+            }}
             onRangeChange={setRange}
             onSetBalance={handleSetBalance}
             onEditMonth={handleEditMonth}

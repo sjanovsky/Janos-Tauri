@@ -15,13 +15,20 @@ export type ChartPoint = {
 };
 
 export function parseDate(dateString: string): Date | null {
-  const [month, day, year] = dateString.split("/").map((part) => Number.parseInt(part, 10));
+  const parts = dateString.split("/");
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const [month, day, year] = parts.map((part) => Number.parseInt(part, 10));
   if ([month, day, year].some((value) => Number.isNaN(value))) {
     return null;
   }
 
   const fullYear = year < 100 ? 2000 + year : year;
-  return new Date(fullYear, month - 1, day);
+  const date = new Date(fullYear, month - 1, day);
+  // Out-of-range pieces can still yield an Invalid Date, which throws when formatted.
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function bucketKeyForDate(date: Date, range: ChartRange): string {

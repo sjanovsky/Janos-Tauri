@@ -96,6 +96,7 @@ pub fn run() {
             spending::update_transaction_category,
             spending::update_transaction_categories,
             spending::flip_transaction_amounts,
+            spending::delete_transactions,
             spending::confirm_auto_categorized,
             spending::list_categories,
             spending::upsert_category,

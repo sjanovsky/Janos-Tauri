@@ -15,12 +15,12 @@ type View =
   "income" | "paychecks" | "spending" | "cashflow" | "networth" | "planning" | "forecasting" | "taxes" | "sankey" | "upload" | "settings";
 
 const TABS: { id: View; label: string }[] = [
-  { id: "sankey", label: "Overview" },
+  { id: "networth", label: "Month End" },
   { id: "income", label: "Income" },
   { id: "spending", label: "Spending" },
   { id: "cashflow", label: "Cash Flow" },
+  { id: "sankey", label: "Sankey" },
   { id: "taxes", label: "Taxes" },
-  { id: "networth", label: "Net Worth" },
   { id: "planning", label: "Planning" },
   { id: "forecasting", label: "Forecasting" },
 ];

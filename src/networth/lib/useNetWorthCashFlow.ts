@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { buildCashFlow, LEFTOVER_SEGMENT_ID } from "../../cashflow/lib/cashflow";
+import { buildCashFlow, spendingSegmentId } from "../../cashflow/lib/cashflow";
 import type { BucketRecord, CategoryRecord } from "../../spending/lib/categories";
 import type { PaychecksData } from "../../income/lib/income";
 import type { UploadedFileView } from "../../upload/lib/uploads";
 
-export type MonthCashFlow = { income: number; expenses: number };
+// One month: the paycheck deposits that landed and everything spent (positive).
+export type MonthCashFlow = { paycheck: number; spending: number };
+
+const SPENDING_PREFIX = spendingSegmentId("");
 
 const EMPTY_PAYCHECKS: PaychecksData = { paychecks: [], buckets: [], items: [] };
 
-// Actual income and expenses per calendar month ("YYYY-MM"), from the same sources and rules as the
-// Cash Flow page: income is gross pay, expenses are everything that left it (withholding and
-// spending). Net income is the difference, so it matches Cash Flow's leftover.
+// Actual paycheck deposits (take-home, not gross) and total spending per calendar month
+// ("YYYY-MM"), from the same sources and rules as the Cash Flow page. Spending is every spending
+// bucket together; withheld amounts (taxes, retirement) aren't spending, they never reach the bank.
 export function useNetWorthCashFlow(): Map<string, MonthCashFlow> {
   const [uploads, setUploads] = useState<UploadedFileView[]>([]);
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
@@ -42,16 +45,17 @@ export function useNetWorthCashFlow(): Map<string, MonthCashFlow> {
       members: [],
     });
     const byMonth = new Map<string, MonthCashFlow>();
-    const columns = result.series.map((point) => point.key);
-    const gross = result.rows.find((row) => row.kind === "gross");
-    columns.forEach((month, index) => {
-      // Group rows hold money out as negatives; Leftover isn't an expense.
-      const expenses = result.rows
-        .filter((row) => row.kind === "group")
-        .flatMap((row) => row.children)
-        .filter((child) => child.id !== LEFTOVER_SEGMENT_ID)
-        .reduce((sum, child) => sum + child.perColumn[index], 0);
-      byMonth.set(month, { income: gross?.perColumn[index] ?? 0, expenses: -expenses });
+    // With no groups, every bucket lands in one row whose children are the individual buckets;
+    // the spending ones are the money spent.
+    const spendingLines = result.rows
+      .filter((row) => row.kind === "group")
+      .flatMap((row) => row.children)
+      .filter((child) => child.id.startsWith(SPENDING_PREFIX));
+    result.series.forEach((point, index) => {
+      byMonth.set(point.key, {
+        paycheck: result.depositPerColumn[index],
+        spending: -spendingLines.reduce((sum, line) => sum + line.perColumn[index], 0),
+      });
     });
     return byMonth;
   }, [uploads, categories, buckets, paychecks]);
