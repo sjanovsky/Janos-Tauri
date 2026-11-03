@@ -1031,6 +1031,17 @@ body,
   cursor: default;
 }
 
+/* Summing row pinned above the rest: the divider sits beneath it instead. */
+.import-shell__totals-label--net-top,
+.import-shell__totals-row--net-top {
+  margin-top: 0;
+  margin-bottom: 0.3rem;
+  padding-top: 0;
+  padding-bottom: 0.2rem;
+  border-top: 0;
+  border-bottom: 1px solid var(--chart-gridline);
+}
+
 .import-shell__totals-values {
   display: flex;
   flex-direction: column;

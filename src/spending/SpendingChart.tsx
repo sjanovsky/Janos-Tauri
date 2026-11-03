@@ -108,6 +108,8 @@ type SpendingChartProps = {
   groupOptions?: { mode: GroupMode; label: string }[];
   // Label of the bottom row that sums every column; "Net" by default.
   netLabel?: string;
+  // Show the summing row above the other rows instead of below them.
+  netOnTop?: boolean;
   // A value per column, drawn as a line over the bars (and replacing the label atop each bar).
   lineValues?: number[];
   // What the line measures, for the hover tooltip.
@@ -141,6 +143,7 @@ function SpendingChart({
   settingsLabel = "Buckets & categories",
   groupOptions,
   netLabel = "Net",
+  netOnTop = false,
   lineValues,
   lineLabel = "Total",
 }: SpendingChartProps) {
@@ -150,6 +153,34 @@ function SpendingChart({
     { mode: "bucket" as GroupMode, label: bucketLabel },
     { mode: "bank" as GroupMode, label: "Banks" },
   ];
+
+  const netLabelRow = (
+    <div
+      className={`import-shell__totals-label import-shell__totals-label--net${netOnTop ? " import-shell__totals-label--net-top" : ""}`}
+    >
+      {netLabel}
+    </div>
+  );
+  const netValuesRow = (
+    <div className={`import-shell__totals-row import-shell__totals-row--net${netOnTop ? " import-shell__totals-row--net-top" : ""}`}>
+      {activeTotals.netPerColumn.map((value, index) => {
+        const point = activeSeries[index];
+        const columnSelected = selectedBucketKey === point.key;
+        return (
+          <button
+            key={point.key}
+            type="button"
+            className={`import-shell__totals-cell import-shell__totals-cell--net ${columnSelected ? "import-shell__totals-cell--column" : ""}`}
+            style={{ flex: `1 0 ${COLUMN_BASIS_BY_RANGE[chartRange]}px` }}
+            aria-label={`Filter the table to ${point.label}: ${currencyFormatter.format(value)}`}
+            onClick={() => onToggleBucket(point.key)}
+          >
+            {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
+          </button>
+        );
+      })}
+    </div>
+  );
 
   return (
     <>
@@ -245,6 +276,7 @@ function SpendingChart({
                         groupMode === "bank" ? "import-shell__totals-labels--standalone" : ""
                       }`}
                     >
+                      {netOnTop && netLabelRow}
                       {activeTotals.displayRows.map((row) => {
                         if (row.kind === "bucketTotal") {
                           const rowSelected =
@@ -300,7 +332,7 @@ function SpendingChart({
                           </button>
                         );
                       })}
-                      <div className="import-shell__totals-label import-shell__totals-label--net">{netLabel}</div>
+                      {!netOnTop && netLabelRow}
                     </div>
                   )}
                 </div>
@@ -480,6 +512,7 @@ function SpendingChart({
                           groupMode === "bank" ? "import-shell__totals-values--standalone" : ""
                         }`}
                       >
+                        {netOnTop && netValuesRow}
                         {activeTotals.displayRows.map((row) => {
                           if (row.kind === "bucketTotal") {
                             return (
@@ -539,25 +572,7 @@ function SpendingChart({
                             </div>
                           );
                         })}
-
-                        <div className="import-shell__totals-row import-shell__totals-row--net">
-                          {activeTotals.netPerColumn.map((value, index) => {
-                            const point = activeSeries[index];
-                            const columnSelected = selectedBucketKey === point.key;
-                            return (
-                              <button
-                                key={point.key}
-                                type="button"
-                                className={`import-shell__totals-cell import-shell__totals-cell--net ${columnSelected ? "import-shell__totals-cell--column" : ""}`}
-                                style={{ flex: `1 0 ${COLUMN_BASIS_BY_RANGE[chartRange]}px` }}
-                                aria-label={`Filter the table to ${point.label}: ${currencyFormatter.format(value)}`}
-                                onClick={() => onToggleBucket(point.key)}
-                              >
-                                {value === 0 ? "—" : wholeCurrencyFormatter.format(value)}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        {!netOnTop && netValuesRow}
                       </div>
                     )}
                   </div>

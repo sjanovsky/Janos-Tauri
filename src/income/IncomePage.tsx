@@ -1157,6 +1157,7 @@ function IncomePage({ view = "income" }: IncomePageProps) {
               settingsLabel="Income categories"
               groupOptions={GROUP_OPTIONS}
               netLabel="Gross"
+              netOnTop
               hasTransactions={transactions.length > 0}
               selectedCategories={categoryOrder}
               chartRange={chartRange}

@@ -8,6 +8,8 @@ import {
 } from "react";
 import Modal from "../spending/Modal";
 import { ColorSwatchPicker } from "../spending/ColorSwatchPicker";
+import ConfirmDeleteButton from "../spending/ConfirmDeleteButton";
+import InlineAdd from "../spending/InlineAdd";
 import {
   CloseIcon,
   GripIcon,
@@ -103,7 +105,21 @@ type PaycheckBucketsBoardProps = Pick<
   | "onDeleteItem"
   | "onMoveItem"
   | "onMoveBucket"
->;
+> & {
+  // Render only one piece of the board (the Settings page's combined Cash Flow board assembles
+  // the pieces itself): the bucket rows, the Ungrouped tray, or the add forms.
+  part?: "all" | "buckets" | "ungrouped";
+  // Each bucket row ends with a field for adding a line item straight into it, and the delete
+  // buttons ask first. (The standalone board has its own add forms instead.)
+  inline?: boolean;
+  // With part "buckets": only these buckets' rows.
+  onlyBucketIds?: string[];
+  // When given, dragging a bucket by its grip also carries this cash flow item key, so it can be
+  // dropped onto a Cash Flow group.
+  groupItemKey?: (bucketId: string) => string;
+};
+
+const CASHFLOW_ITEM_DRAG_TYPE = "application/x-janos-cashflow-item";
 
 // The paycheck buckets & line items board: drag line items between buckets, reorder buckets,
 // rename, recolor, add and delete. Shown in the line items modal and on the Settings page.
@@ -116,6 +132,10 @@ export function PaycheckBucketsBoard({
   onDeleteItem,
   onMoveItem,
   onMoveBucket,
+  part = "all",
+  inline = false,
+  onlyBucketIds,
+  groupItemKey,
 }: PaycheckBucketsBoardProps) {
   const [newBucket, setNewBucket] = useState("");
   const [newItem, setNewItem] = useState("");
@@ -135,6 +155,15 @@ export function PaycheckBucketsBoard({
   const orderedBuckets = [...buckets].sort(
     (a, b) => a.position - b.position || a.name.localeCompare(b.name),
   );
+  const shownBuckets = onlyBucketIds
+    ? orderedBuckets.filter((bucket) => onlyBucketIds.includes(bucket.id))
+    : orderedBuckets;
+  // A line item may be dragged in from another board instance, so the drag is also read from the
+  // drag data, not just this instance's state.
+  const isItemDrag = (event: DragEvent<HTMLElement>) =>
+    draggingItemId !== null || event.dataTransfer.types.includes(ITEM_DRAG_TYPE);
+  const draggedItemId = (event: DragEvent<HTMLElement>) =>
+    draggingItemId ?? (event.dataTransfer.getData(ITEM_DRAG_TYPE) || null);
   const orderedItems = [...items].sort(
     (a, b) => a.position - b.position || a.label.localeCompare(b.label),
   );
@@ -208,7 +237,7 @@ export function PaycheckBucketsBoard({
         }}
         onDragEnd={clearDrag}
         onDragOver={(event) => {
-          if (!draggingItemId) {
+          if (!isItemDrag(event)) {
             return;
           }
           event.preventDefault();
@@ -217,12 +246,13 @@ export function PaycheckBucketsBoard({
           setDragOverKey(bucketId ?? "ungrouped");
         }}
         onDrop={(event) => {
-          if (!draggingItemId) {
+          const droppedId = draggedItemId(event);
+          if (!droppedId) {
             return;
           }
           event.preventDefault();
           event.stopPropagation();
-          if (draggingItemId === item.id) {
+          if (droppedId === item.id) {
             clearDrag();
             return;
           }
@@ -230,7 +260,7 @@ export function PaycheckBucketsBoard({
           const after = event.clientX > rect.left + rect.width / 2;
           const index = siblings.findIndex((sibling) => sibling.id === item.id);
           const next = after ? siblings[index + 1] : item;
-          dropItem(draggingItemId, bucketId, next?.id ?? null);
+          dropItem(droppedId, bucketId, next?.id ?? null);
         }}
       >
         {editing ? (
@@ -278,25 +308,9 @@ export function PaycheckBucketsBoard({
     );
   };
 
-  return (
-    <section className="category-manager">
-      <div className="category-manager__heading">
-        <h2>Paycheck Buckets</h2>
-        <p>
-          Drag a line item into a bucket to group it, or onto “Ungrouped” to
-          pull it back out. These are shared by every paycheck; each paycheck
-          keeps its own amounts in the grid. Double-click a line item to rename
-          it.
-        </p>
-      </div>
-
-      <div className="bucket-board">
-        <div className="bucket-board__header">
-          <span className="bucket-board__header-label">Bucket</span>
-          <span className="bucket-board__header-label">Line items</span>
-        </div>
-
-        {orderedBuckets.map((bucket) => {
+  const bucketRows = (
+    <>
+        {shownBuckets.map((bucket) => {
           const members = itemsIn(bucket.id);
           return (
             <div
@@ -308,7 +322,7 @@ export function PaycheckBucketsBoard({
                 if (draggingBucketId) {
                   event.preventDefault();
                   event.dataTransfer.dropEffect = "move";
-                } else if (draggingItemId) {
+                } else if (isItemDrag(event)) {
                   event.preventDefault();
                   event.dataTransfer.dropEffect = "move";
                   setDragOverKey(bucket.id);
@@ -326,6 +340,10 @@ export function PaycheckBucketsBoard({
                 }
               }}
               onDrop={(event) => {
+                if (!draggingBucketId && !draggedItemId(event)) {
+                  // A bucket dragged in from another group: let the group row take it.
+                  return;
+                }
                 event.preventDefault();
                 if (draggingBucketId) {
                   if (draggingBucketId !== bucket.id) {
@@ -339,8 +357,8 @@ export function PaycheckBucketsBoard({
                     onMoveBucket(draggingBucketId, next?.id ?? null);
                   }
                   clearDrag();
-                } else if (draggingItemId) {
-                  dropItem(draggingItemId, bucket.id, null);
+                } else if (draggedItemId(event)) {
+                  dropItem(draggedItemId(event)!, bucket.id, null);
                 }
               }}
             >
@@ -354,6 +372,9 @@ export function PaycheckBucketsBoard({
                   title="Drag to reorder this bucket"
                   onDragStart={(event) => {
                     event.dataTransfer.setData(BUCKET_DRAG_TYPE, bucket.id);
+                    if (groupItemKey) {
+                      event.dataTransfer.setData(CASHFLOW_ITEM_DRAG_TYPE, groupItemKey(bucket.id));
+                    }
                     event.dataTransfer.effectAllowed = "move";
                     const row = (event.currentTarget as HTMLElement).closest(
                       ".bucket-row",
@@ -422,27 +443,48 @@ export function PaycheckBucketsBoard({
                     renderPill(item, bucket.color, members, bucket.id),
                   )
                 )}
+                {inline && (
+                  <InlineAdd
+                    placeholder="+ Add line item"
+                    onAdd={(label) =>
+                      onSaveItem({ id: crypto.randomUUID(), label, bucketId: bucket.id })
+                    }
+                  />
+                )}
               </div>
 
-              <button
-                type="button"
-                className="import-shell__upload-delete bucket-row__delete"
-                aria-label={`Delete bucket ${bucket.name}`}
-                title="Delete bucket (its line items become ungrouped)"
-                onClick={() => onDeleteBucket(bucket.id)}
-              >
-                <TrashIcon />
-              </button>
+              {inline ? (
+                <ConfirmDeleteButton
+                  what={`bucket ${bucket.name}`}
+                  consequence="Its line items become ungrouped."
+                  onConfirm={() => onDeleteBucket(bucket.id)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="import-shell__upload-delete bucket-row__delete"
+                  aria-label={`Delete bucket ${bucket.name}`}
+                  title="Delete bucket (its line items become ungrouped)"
+                  onClick={() => onDeleteBucket(bucket.id)}
+                >
+                  <TrashIcon />
+                </button>
+              )}
             </div>
           );
         })}
 
+    </>
+  );
+
+  const trayRows = (
+    <>
         <div
           className={`bucket-row bucket-row--ungrouped ${
             dragOverKey === "ungrouped" ? "bucket-row--drop" : ""
           }`}
           onDragOver={(event) => {
-            if (draggingItemId) {
+            if (isItemDrag(event)) {
               event.preventDefault();
               event.dataTransfer.dropEffect = "move";
               setDragOverKey("ungrouped");
@@ -459,8 +501,9 @@ export function PaycheckBucketsBoard({
           }}
           onDrop={(event) => {
             event.preventDefault();
-            if (draggingItemId) {
-              dropItem(draggingItemId, null, null);
+            const droppedId = draggedItemId(event);
+            if (droppedId) {
+              dropItem(droppedId, null, null);
             }
           }}
         >
@@ -481,8 +524,39 @@ export function PaycheckBucketsBoard({
             )}
           </div>
         </div>
-      </div>
+    </>
+  );
 
+  // Just the Ungrouped line items (no row around them), for the Settings page's single combined
+  // Ungrouped row that also holds the spending categories.
+  const ungroupedZone = (
+    <div
+      className={`settings-zone ${dragOverKey === "ungrouped" ? "settings-zone--drop" : ""}`}
+      onDragOver={(event) => {
+        if (isItemDrag(event)) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          setDragOverKey("ungrouped");
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setDragOverKey((current) => (current === "ungrouped" ? null : current));
+        }
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const droppedId = draggedItemId(event);
+        if (droppedId) {
+          dropItem(droppedId, null, null);
+        }
+      }}
+    >
+      {ungrouped.map((item) => renderPill(item, UNGROUPED_BUCKET_COLOR, ungrouped, null))}
+    </div>
+  );
+
+  const forms = (
       <div className="bucket-board__forms">
         <form className="bucket-board__add" onSubmit={addBucket}>
           <div className="bucket-board__field">
@@ -528,6 +602,40 @@ export function PaycheckBucketsBoard({
           </div>
         </form>
       </div>
+  );
+
+  if (part !== "all") {
+    return (
+      <>
+        {part === "buckets" && bucketRows}
+        {part === "ungrouped" && ungroupedZone}
+      </>
+    );
+  }
+
+  return (
+    <section className="category-manager">
+      <div className="category-manager__heading">
+        <h2>Paycheck Buckets</h2>
+        <p>
+          Drag a line item into a bucket to group it, or onto “Ungrouped” to
+          pull it back out. These are shared by every paycheck; each paycheck
+          keeps its own amounts in the grid. Double-click a line item to rename
+          it.
+        </p>
+      </div>
+
+      <div className="bucket-board">
+        <div className="bucket-board__header">
+          <span className="bucket-board__header-label">Bucket</span>
+          <span className="bucket-board__header-label">Line items</span>
+        </div>
+
+        {bucketRows}
+        {trayRows}
+      </div>
+
+      {forms}
     </section>
   );
 }

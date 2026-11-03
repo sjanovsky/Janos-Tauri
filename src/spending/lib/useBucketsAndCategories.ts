@@ -29,19 +29,25 @@ export function useBucketsAndCategories({
   onError,
   onCategoryRemoved,
 }: Options) {
-  const handleAddCategory = (label: string, color: string) => {
+  // Adds a category (Ungrouped, or straight into `bucketId`) and returns its id.
+  const handleAddCategory = (label: string, color: string, bucketId: string | null = null) => {
     const previousRecords = categoryRecords;
     const id = generateCategoryId(label, categoryRecords.map((record) => record.id));
     setCategoryRecords((current) => [
       ...current,
-      { id, label, color, excluded: false, bucketId: null, position: 0 },
+      { id, label, color, excluded: false, bucketId, position: 0 },
     ]);
 
-    invoke("upsert_category", { id, label, color }).catch((error) => {
+    const saved = invoke("upsert_category", { id, label, color });
+    (bucketId
+      ? saved.then(() => invoke("set_category_placement", { id, label, color, excluded: false, bucketId }))
+      : saved
+    ).catch((error) => {
       console.error("Failed to save the new category to the database", error);
       onError("Couldn't save that category to the database.");
       setCategoryRecords(previousRecords);
     });
+    return id;
   };
 
   const handleUpdateCategory = (id: string, label: string, color: string) => {
@@ -86,6 +92,7 @@ export function useBucketsAndCategories({
       onError("Couldn't save that bucket to the database.");
       setBuckets(previousBuckets);
     });
+    return id;
   };
 
   const handleRenameBucket = (id: string, name: string) => {

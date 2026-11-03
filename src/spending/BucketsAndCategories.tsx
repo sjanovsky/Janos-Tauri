@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
 import { ColorSwatchPicker } from "./ColorSwatchPicker";
+import ConfirmDeleteButton from "./ConfirmDeleteButton";
+import InlineAdd from "./InlineAdd";
 import {
   EXCLUDE_BUCKET_COLOR,
   EXCLUDE_BUCKET_ID,
@@ -12,10 +14,12 @@ import {
 type BucketsAndCategoriesProps = {
   categories: CategoryRecord[];
   buckets: BucketRecord[];
-  onAdd: (label: string, color: string) => void;
+  // `bucketId` adds the category straight into that bucket. Returns the new category's id.
+  onAdd: (label: string, color: string, bucketId?: string | null) => string | void;
   onUpdate: (id: string, label: string, color: string) => void;
   onDelete: (id: string) => void;
-  onAddBucket: (name: string) => void;
+  // Returns the new bucket's id.
+  onAddBucket: (name: string) => string | void;
   onRenameBucket: (id: string, name: string) => void;
   onSetBucketColor: (id: string, color: string) => void;
   onDeleteBucket: (id: string) => void;
@@ -31,11 +35,23 @@ type BucketsAndCategoriesProps = {
     excluded: boolean,
     orderedBucketIds?: string[],
   ) => void;
+  // Render only one piece of the board (the Settings page's combined Cash Flow board assembles
+  // the pieces itself): the bucket rows, the Ungrouped drop zone (just its pills), or the Exclude row.
+  part?: "all" | "buckets" | "ungrouped" | "exclude";
+  // Each bucket row ends with a field for adding a category straight into it, and the delete
+  // buttons ask first. (The standalone board has its own add forms instead.)
+  inline?: boolean;
+  // With part "buckets": only these buckets' rows.
+  onlyBucketIds?: string[];
+  // When given, dragging a bucket by its grip also carries this cash flow item key, so it can be
+  // dropped onto a Cash Flow group.
+  groupItemKey?: (bucketId: string) => string;
 };
 
 const NEW_CATEGORY_DEFAULT_COLOR = "#4f46e5";
 const CATEGORY_DRAG_TYPE = "application/x-janos-category";
 const BUCKET_DRAG_TYPE = "application/x-janos-bucket";
+const CASHFLOW_ITEM_DRAG_TYPE = "application/x-janos-cashflow-item";
 
 export function TrashIcon() {
   return (
@@ -139,6 +155,10 @@ function BucketsAndCategories({
   onDeleteBucket,
   onReorderBuckets,
   onPlaceCategory,
+  part = "all",
+  inline = false,
+  onlyBucketIds,
+  groupItemKey,
 }: BucketsAndCategoriesProps) {
   const [newLabel, setNewLabel] = useState("");
   const [newColor, setNewColor] = useState(NEW_CATEGORY_DEFAULT_COLOR);
@@ -240,13 +260,17 @@ function BucketsAndCategories({
   // Buckets to render, in preview order while one is being dragged.
   const displayBuckets = (): BucketRecord[] => {
     const base = buckets.slice().sort(byBucketPosition);
+    const visible = onlyBucketIds ? new Set(onlyBucketIds) : null;
+    const shown = (list: BucketRecord[]) => (visible ? list.filter((bucket) => visible.has(bucket.id)) : list);
     if (!draggingBucketId || !bucketDragPreview) {
-      return base;
+      return shown(base);
     }
     const byId = new Map(base.map((bucket) => [bucket.id, bucket]));
-    return bucketDragPreview
-      .map((id) => byId.get(id))
-      .filter((bucket): bucket is BucketRecord => Boolean(bucket));
+    return shown(
+      bucketDragPreview
+        .map((id) => byId.get(id))
+        .filter((bucket): bucket is BucketRecord => Boolean(bucket)),
+    );
   };
 
   const isBucketDrag = (event: DragEvent<HTMLDivElement>) =>
@@ -259,6 +283,9 @@ function BucketsAndCategories({
 
   const handleBucketDragStart = (event: DragEvent<HTMLSpanElement>, bucket: BucketRecord) => {
     event.dataTransfer.setData(BUCKET_DRAG_TYPE, bucket.id);
+    if (groupItemKey) {
+      event.dataTransfer.setData(CASHFLOW_ITEM_DRAG_TYPE, groupItemKey(bucket.id));
+    }
     event.dataTransfer.effectAllowed = "move";
     // Drag the whole row, not just the grip.
     const row = (event.currentTarget as HTMLElement).closest(".bucket-row");
@@ -393,6 +420,9 @@ function BucketsAndCategories({
       handleRowDragOver(event, bucket.id);
       return;
     }
+    if (!draggingBucketId) {
+      return;
+    }
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     if (!draggingBucketId || bucket.id === draggingBucketId) {
@@ -415,6 +445,9 @@ function BucketsAndCategories({
   const handleBucketRowDrop = (event: DragEvent<HTMLDivElement>, bucket: BucketRecord) => {
     if (!isBucketDrag(event)) {
       handleRowDrop(event, { bucketId: bucket.id, excluded: false });
+      return;
+    }
+    if (!draggingBucketId) {
       return;
     }
     event.preventDefault();
@@ -498,21 +531,8 @@ function BucketsAndCategories({
     );
   };
 
-  return (
-    <section className="category-manager">
-      <div className="category-manager__heading">
-        <h2>Spending Buckets</h2>
-        <p>
-          Drag a category into a bucket to group it. Drop it in “Exclude” to leave it out of
-          spending, or “Ungrouped” to pull it back out.
-        </p>
-      </div>
-
-      <div className="bucket-board">
-        <div className="bucket-board__header">
-          <span className="bucket-board__header-label">Bucket</span>
-          <span className="bucket-board__header-label">Categories</span>
-        </div>
+  const bucketRows = (
+    <>
         {displayBuckets().map((bucket) => {
           const members = displayMembers(bucket.id);
           const isOver = dragOverKey === bucket.id;
@@ -582,20 +602,66 @@ function BucketsAndCategories({
                 ) : (
                   members.map((category) => renderPill(category, bucket.color, bucket.id))
                 )}
+                {inline && (
+                  <InlineAdd
+                    placeholder="+ Add category"
+                    onAdd={(label) => onAdd(label, bucket.color, bucket.id)}
+                  />
+                )}
               </div>
 
-              <button
-                type="button"
-                className="import-shell__upload-delete bucket-row__delete"
-                aria-label={`Delete bucket ${bucket.name}`}
-                onClick={() => onDeleteBucket(bucket.id)}
-              >
-                <TrashIcon />
-              </button>
+              {inline ? (
+                <ConfirmDeleteButton
+                  what={`bucket ${bucket.name}`}
+                  consequence="Its categories become ungrouped."
+                  onConfirm={() => onDeleteBucket(bucket.id)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="import-shell__upload-delete bucket-row__delete"
+                  aria-label={`Delete bucket ${bucket.name}`}
+                  onClick={() => onDeleteBucket(bucket.id)}
+                >
+                  <TrashIcon />
+                </button>
+              )}
             </div>
           );
         })}
 
+    </>
+  );
+
+  const excludeRow = (
+    <>
+        <div
+          className={`bucket-row bucket-row--exclude ${
+            dragOverKey === EXCLUDE_BUCKET_ID ? "bucket-row--drop" : ""
+          }`}
+          onDragOver={(event) => handleRowDragOver(event, EXCLUDE_BUCKET_ID)}
+          onDragLeave={(event) => handleRowDragLeave(event, EXCLUDE_BUCKET_ID)}
+          onDrop={(event) => handleRowDrop(event, { bucketId: null, excluded: true })}
+        >
+          <div className="bucket-row__head">
+            <span className="bucket-row__name bucket-row__name--static">Exclude</span>
+          </div>
+          <div className="bucket-row__items">
+            {excluded.length === 0 ? (
+              <span className="bucket-row__empty">Drop here to leave out of spending</span>
+            ) : (
+              excluded
+                .slice()
+                .sort(byLabel)
+                .map((category) => renderPill(category, EXCLUDE_BUCKET_COLOR))
+            )}
+          </div>
+        </div>
+    </>
+  );
+
+  const trayRows = (
+    <>
         <div
           className={`bucket-row bucket-row--exclude ${
             dragOverKey === EXCLUDE_BUCKET_ID ? "bucket-row--drop" : ""
@@ -641,8 +707,26 @@ function BucketsAndCategories({
             )}
           </div>
         </div>
-      </div>
+    </>
+  );
 
+  // Just the Ungrouped categories (no row around them), for the Settings page's single combined
+  // Ungrouped row that also holds the paycheck line items.
+  const ungroupedZone = (
+    <div
+      className={`settings-zone ${dragOverKey === UNGROUPED_BUCKET_ID ? "settings-zone--drop" : ""}`}
+      onDragOver={(event) => handleRowDragOver(event, UNGROUPED_BUCKET_ID)}
+      onDragLeave={(event) => handleRowDragLeave(event, UNGROUPED_BUCKET_ID)}
+      onDrop={(event) => handleRowDrop(event, { bucketId: null, excluded: false })}
+    >
+      {ungrouped
+        .slice()
+        .sort(byLabel)
+        .map((category) => renderPill(category, UNGROUPED_BUCKET_COLOR))}
+    </div>
+  );
+
+  const forms = (
       <div className="bucket-board__forms">
         <form className="bucket-board__add" onSubmit={handleAddBucketSubmit}>
           <div className="bucket-board__field">
@@ -688,6 +772,38 @@ function BucketsAndCategories({
           </div>
         </form>
       </div>
+  );
+
+  if (part !== "all") {
+    return (
+      <>
+        {part === "buckets" && bucketRows}
+        {part === "ungrouped" && ungroupedZone}
+        {part === "exclude" && excludeRow}
+      </>
+    );
+  }
+
+  return (
+    <section className="category-manager">
+      <div className="category-manager__heading">
+        <h2>Spending Buckets</h2>
+        <p>
+          Drag a category into a bucket to group it. Drop it in “Exclude” to leave it out of
+          spending, or “Ungrouped” to pull it back out.
+        </p>
+      </div>
+
+      <div className="bucket-board">
+        <div className="bucket-board__header">
+          <span className="bucket-board__header-label">Bucket</span>
+          <span className="bucket-board__header-label">Categories</span>
+        </div>
+        {bucketRows}
+        {trayRows}
+      </div>
+
+      {forms}
     </section>
   );
 }

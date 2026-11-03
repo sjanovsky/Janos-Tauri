@@ -11,10 +11,66 @@ import { useCashflowGroups } from "../cashflow/lib/useCashflowGroups";
 import type { BucketRecord, CategoryRecord } from "../spending/lib/categories";
 import type { PaychecksData } from "../income/lib/income";
 import type { AccountRecord, NetWorthBucketRecord } from "../networth/lib/networth";
-import type { CashflowData, CashflowGroupRecord, CashflowMemberRecord } from "../cashflow/lib/groups";
+import { BUCKET_COLOR_PALETTE } from "../spending/lib/categories";
+import {
+  NO_GROUP_ID,
+  paycheckItemKey,
+  spendingItemKey,
+  type CashflowData,
+  type CashflowGroupRecord,
+  type CashflowMemberRecord,
+} from "../cashflow/lib/groups";
 import "./settings.css";
 
+const PAYCHECK_PREFIX = paycheckItemKey("");
+const SPENDING_PREFIX = spendingItemKey("");
 const EMPTY_PAYCHECKS: PaychecksData = { paychecks: [], buckets: [], items: [] };
+
+type BucketKind = "spending" | "paycheck";
+
+// The one "new bucket" field at the bottom of a group. It makes a paycheck bucket in groups that
+// hold only paycheck buckets and a spending bucket otherwise; the picker shows once there's a name,
+// to override that.
+function GroupAddBucket({
+  defaultKind,
+  onAdd,
+}: {
+  defaultKind: BucketKind;
+  onAdd: (name: string, kind: BucketKind) => void;
+}) {
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<BucketKind | null>(null);
+  const chosen = kind ?? defaultKind;
+  return (
+    <form
+      className="settings-group-add"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const trimmed = name.trim();
+        if (trimmed) {
+          onAdd(trimmed, chosen);
+          setName("");
+          setKind(null);
+        }
+      }}
+    >
+      <input
+        type="text"
+        className="inline-add__input"
+        placeholder="+ Add bucket to this group"
+        aria-label="New bucket in this group"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      {name.trim() && (
+        <select value={chosen} aria-label="Bucket type" onChange={(event) => setKind(event.target.value as BucketKind)}>
+          <option value="spending">Spending bucket</option>
+          <option value="paycheck">Paycheck bucket</option>
+        </select>
+      )}
+    </form>
+  );
+}
 
 // The one place to see and edit every bucket, category and group the app uses. Each section is the
 // same editor as that page's own Manage dialog, so edits made here show up there and vice versa.
@@ -85,6 +141,30 @@ function SettingsPage() {
     onError: setError,
   });
 
+  const addBucketToGroup = (groupId: string, name: string, kind: BucketKind) => {
+    if (kind === "spending") {
+      const id = spendingProps.onAddBucket(name);
+      if (typeof id === "string") {
+        cashflowProps.onPlaceItem(spendingItemKey(id), groupId);
+      }
+    } else {
+      const id = crypto.randomUUID();
+      paycheckProps.onSaveBucket({
+        id,
+        name,
+        color: BUCKET_COLOR_PALETTE[paychecks.buckets.length % BUCKET_COLOR_PALETTE.length],
+      });
+      cashflowProps.onPlaceItem(paycheckItemKey(id), groupId);
+    }
+  };
+
+  const bucketIds = new Set(buckets.map((bucket) => bucket.id));
+  const paycheckBucketIds = new Set(paychecks.buckets.map((bucket) => bucket.id));
+  const nothingUngrouped =
+    !categoryRecords.some((category) => !category.excluded && !(category.bucketId && bucketIds.has(category.bucketId))) &&
+    !paychecks.items.some((item) => !(item.bucketId && paycheckBucketIds.has(item.bucketId))) &&
+    !cashflowProps.items.some((item) => (cashflowProps.groupOfItem.get(item.key) ?? NO_GROUP_ID) === NO_GROUP_ID);
+
   return (
     <div className="settings-page">
       <div className="settings-page__heading">
@@ -93,13 +173,68 @@ function SettingsPage() {
       </div>
       {error && <div className="import-shell__db-error">{error}</div>}
 
-      <BucketsAndCategories {...spendingProps} />
-
-      <PaycheckBucketsBoard {...paycheckProps} />
+      <CashFlowGroups
+        {...cashflowProps}
+        title="Cash Flow"
+        itemsLabel="Buckets & categories"
+        description={
+          <>
+            Drag a bucket by its handle into a group to roll it up on the Cash Flow chart. Drag a
+            category or line item between buckets to regroup it. Drag “Leftover” into a group
+            (usually Savings) to count what's left each month as that group's money; leave it out
+            and it shows as Net income.
+          </>
+        }
+        isNestedKey={(key) => key.startsWith(PAYCHECK_PREFIX) || key.startsWith(SPENDING_PREFIX)}
+        renderNested={(groupId, keys) => {
+          const idsWith = (prefix: string) =>
+            keys.filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length));
+          const paycheckIds = idsWith(PAYCHECK_PREFIX);
+          const spendingIds = idsWith(SPENDING_PREFIX);
+          return (
+            <div className="settings-nested" key={groupId}>
+              {paycheckIds.length > 0 && (
+                <PaycheckBucketsBoard
+                  {...paycheckProps}
+                  part="buckets"
+                  inline
+                  onlyBucketIds={paycheckIds}
+                  groupItemKey={paycheckItemKey}
+                />
+              )}
+              {spendingIds.length > 0 && (
+                <BucketsAndCategories
+                  {...spendingProps}
+                  part="buckets"
+                  inline
+                  onlyBucketIds={spendingIds}
+                  groupItemKey={spendingItemKey}
+                />
+              )}
+              {groupId !== NO_GROUP_ID && (
+                <GroupAddBucket
+                  defaultKind={paycheckIds.length > 0 && spendingIds.length === 0 ? "paycheck" : "spending"}
+                  onAdd={(name, kind) => addBucketToGroup(groupId, name, kind)}
+                />
+              )}
+            </div>
+          );
+        }}
+        ungroupedContent={
+          <>
+            <PaycheckBucketsBoard {...paycheckProps} part="ungrouped" />
+            <BucketsAndCategories {...spendingProps} part="ungrouped" />
+            {nothingUngrouped && (
+              <span className="bucket-row__empty">
+                Drop a bucket, category or line item here to take it out of its group
+              </span>
+            )}
+          </>
+        }
+        endRows={<BucketsAndCategories {...spendingProps} part="exclude" />}
+      />
 
       <AccountsAndBuckets {...netWorthProps} />
-
-      <CashFlowGroups {...cashflowProps} />
     </div>
   );
 }

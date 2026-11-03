@@ -1,6 +1,8 @@
-import { useState, type CSSProperties, type DragEvent, type FormEvent, type ReactNode } from "react";
+import { useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { ColorSwatchPicker } from "../spending/ColorSwatchPicker";
-import { GripIcon, PlusIcon, TrashIcon } from "../spending/BucketsAndCategories";
+import ConfirmDeleteButton from "../spending/ConfirmDeleteButton";
+import InlineAdd from "../spending/InlineAdd";
+import { GripIcon } from "../spending/BucketsAndCategories";
 import { UNGROUPED_BUCKET_COLOR } from "../spending/lib/categories";
 import { NO_GROUP_ID, type CashflowGroupRecord } from "./lib/groups";
 
@@ -29,6 +31,17 @@ type CashFlowGroupsProps = {
   onRemoveItem?: (itemKey: string) => void;
   // Extra content under the board, before the "New group" field (Planning's add-back field).
   footer?: ReactNode;
+  // For boards that show some items as whole nested boards instead of pills (Settings nests each
+  // bucket's categories): items whose key passes `isNestedKey` are left out of the pills and handed
+  // to `renderNested`, which draws them inside the group's row.
+  isNestedKey?: (itemKey: string) => boolean;
+  // Called for every real group (even an empty one, so it can add its own "new bucket" field) and
+  // for Ungrouped when something nested is in it.
+  renderNested?: (groupId: string, itemKeys: string[]) => ReactNode;
+  // Extra content inside the Ungrouped row (Settings puts its ungrouped categories and line items
+  // there, so there's one Ungrouped row), and extra rows at the end of the board (its Exclude row).
+  ungroupedContent?: ReactNode;
+  endRows?: ReactNode;
 };
 
 const ITEM_DRAG_TYPE = "application/x-janos-cashflow-item";
@@ -56,6 +69,10 @@ function CashFlowGroups({
   itemsLabel = "Buckets",
   onRemoveItem,
   footer,
+  isNestedKey,
+  renderNested,
+  ungroupedContent,
+  endRows,
   description = (
     <>
       Drag a bucket into a group to roll it up on the Cash Flow chart. Drag “Leftover” into one
@@ -64,7 +81,6 @@ function CashFlowGroups({
     </>
   ),
 }: CashFlowGroupsProps) {
-  const [newGroup, setNewGroup] = useState("");
   const [draggingItem, setDraggingItem] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
@@ -162,16 +178,6 @@ function CashFlowGroups({
     clearItemDrag();
   };
 
-  const handleAddSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = newGroup.trim();
-    if (!trimmed) {
-      return;
-    }
-    onAddGroup(trimmed);
-    setNewGroup("");
-  };
-
   const renderPill = (item: GroupableItem) => (
     <div
       key={item.key}
@@ -196,7 +202,22 @@ function CashFlowGroups({
     </div>
   );
 
-  const ungrouped = itemsIn(NO_GROUP_ID);
+  // A row's right-hand side: the nested boards (if any) above the plain pills.
+  const renderItems = (groupId: string, emptyText: string) => {
+    const members = itemsIn(groupId);
+    const nested = isNestedKey && renderNested ? members.filter((item) => isNestedKey(item.key)) : [];
+    const pills = members.filter((item) => !nested.includes(item));
+    const showNested = renderNested && (groupId !== NO_GROUP_ID || nested.length > 0);
+    if (members.length === 0 && !showNested) {
+      return <span className="bucket-row__empty">{emptyText}</span>;
+    }
+    return (
+      <>
+        {showNested && renderNested(groupId, nested.map((item) => item.key))}
+        {pills.map(renderPill)}
+      </>
+    );
+  };
 
   return (
     <section className="category-manager">
@@ -211,7 +232,6 @@ function CashFlowGroups({
           <span className="bucket-board__header-label">{itemsLabel}</span>
         </div>
         {displayGroups().map((group) => {
-          const members = itemsIn(group.id);
           return (
             <div
               key={group.id}
@@ -262,24 +282,17 @@ function CashFlowGroups({
                     }
                   }}
                 />
+                <ConfirmDeleteButton
+                  what={`group ${group.name}`}
+                  consequence="Its buckets move to Ungrouped."
+                  onConfirm={() => onDeleteGroup(group.id)}
+                />
               </div>
 
               <div className="bucket-row__items">
-                {members.length === 0 ? (
-                  <span className="bucket-row__empty">Drag {itemsLabel.toLowerCase()} here</span>
-                ) : (
-                  members.map(renderPill)
-                )}
+                {renderItems(group.id, `Drag ${itemsLabel.toLowerCase()} here`)}
               </div>
 
-              <button
-                type="button"
-                className="import-shell__upload-delete bucket-row__delete"
-                aria-label={`Delete group ${group.name}`}
-                onClick={() => onDeleteGroup(group.id)}
-              >
-                <TrashIcon />
-              </button>
             </div>
           );
         })}
@@ -295,34 +308,17 @@ function CashFlowGroups({
             <span className="bucket-row__name bucket-row__name--static">Ungrouped</span>
           </div>
           <div className="bucket-row__items">
-            {ungrouped.length === 0 ? (
-              <span className="bucket-row__empty">Drop here to take a bucket out of its group</span>
-            ) : (
-              ungrouped.map(renderPill)
-            )}
+            {renderItems(NO_GROUP_ID, ungroupedContent ? "" : "Drop here to take a bucket out of its group")}
+            {ungroupedContent}
           </div>
         </div>
+        {endRows}
       </div>
 
       {footer}
 
       <div className="bucket-board__forms">
-        <form className="bucket-board__add" onSubmit={handleAddSubmit}>
-          <div className="bucket-board__field">
-            <input
-              type="text"
-              className="category-manager__label-input"
-              placeholder="New group"
-              value={newGroup}
-              onChange={(event) => setNewGroup(event.target.value)}
-            />
-            {newGroup.trim() && (
-              <button type="submit" className="bucket-board__add-btn" aria-label="Add group" title="Add group">
-                <PlusIcon />
-              </button>
-            )}
-          </div>
-        </form>
+        <InlineAdd placeholder="+ Add group" onAdd={onAddGroup} />
       </div>
     </section>
   );

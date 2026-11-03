@@ -7,3 +7,22 @@
 .settings-name { font-weight: 700; color: #111827; }
 .settings-link { border: 0; padding: 0; background: none; box-shadow: none; color: #4f46e5; font: inherit; text-decoration: underline; cursor: pointer; }
 .settings-page__heading h1 { text-align: left; }
+
+.settings-nested { display: flex; flex-direction: column; flex-basis: 100%; min-width: 0; border: 1px solid #e5e7eb; border-radius: 12px; background: #fafafa; overflow: hidden; }
+.settings-nested .bucket-row { background: white; }
+.settings-trays { flex: none; margin-top: 1rem; }
+.confirm-delete { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; max-width: 18rem; padding: 0.3rem 0.5rem; border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2; font-size: 0.78rem; color: #991b1b; }
+.confirm-delete__text { flex: 1 1 100%; min-width: 0; }
+.confirm-delete__yes, .confirm-delete__no { flex-shrink: 0; padding: 0.2rem 0.55rem; border-radius: 8px; font-size: 0.78rem; font-weight: 600; cursor: pointer; box-shadow: none; }
+.confirm-delete__yes { border: 1px solid #dc2626; background: #dc2626; color: white; }
+.confirm-delete__no { border: 1px solid #d1d5db; background: white; color: #374151; }
+.inline-add { display: inline-flex; }
+.inline-add__input { width: 8.5rem; padding: 0.25rem 0.55rem; border: 1.5px dashed #d1d5db; border-radius: 999px; background: transparent; font: inherit; font-size: 0.82rem; box-shadow: none; }
+.inline-add__input:focus { outline: none; border-style: solid; border-color: #818cf8; background: white; }
+.settings-group-add { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.9rem; border-top: 1px solid #eef0f4; background: white; }
+.settings-group-add .inline-add__input { width: 12rem; border-radius: 8px; }
+.settings-group-add select { padding: 0.25rem 0.4rem; border: 1px solid #d1d5db; border-radius: 8px; font: inherit; font-size: 0.82rem; background: white; box-shadow: none; }
+.settings-zones { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.settings-zone { display: flex; flex-wrap: wrap; gap: 0.4rem; flex: 1 1 auto; min-width: 3rem; min-height: 2rem; align-items: center; border-radius: 8px; }
+.settings-zone--drop { background: #eef2ff; box-shadow: inset 0 0 0 2px rgba(79, 70, 229, 0.35); }
+.bucket-board__forms .inline-add__input { width: 12rem; border-radius: 8px; }
