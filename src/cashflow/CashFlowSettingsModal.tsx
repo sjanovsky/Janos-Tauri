@@ -7,7 +7,7 @@ type CashFlowSettingsModalProps = {
   groups: ComponentProps<typeof CashFlowGroups>;
 };
 
-// The Cash Flow settings modal: organize buckets into groups (Taxes, Savings, Spending, ...).
+// The Cash Flow settings modal: recolor the two groups and place Leftover.
 function CashFlowSettingsModal({ onClose, groups }: CashFlowSettingsModalProps) {
   return (
     <Modal label="Cash flow groups" onClose={onClose}>

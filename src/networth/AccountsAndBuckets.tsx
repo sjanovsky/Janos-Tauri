@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
 import { ColorSwatchPicker } from "../spending/ColorSwatchPicker";
+import ConfirmDeleteButton from "../spending/ConfirmDeleteButton";
+import InlineAdd from "../spending/InlineAdd";
 import {
   UNGROUPED_BUCKET_COLOR,
   UNGROUPED_BUCKET_ID,
@@ -10,7 +12,8 @@ import {
 type AccountsAndBucketsProps = {
   accounts: AccountRecord[];
   buckets: NetWorthBucketRecord[];
-  onAddAccount: (name: string) => void;
+  // `bucketId` adds the account straight into that bucket.
+  onAddAccount: (name: string, bucketId?: string | null) => void;
   onRenameAccount: (id: string, name: string) => void;
   onDeleteAccount: (id: string) => void;
   onAddBucket: (name: string) => void;
@@ -23,6 +26,10 @@ type AccountsAndBucketsProps = {
   // bucket, `orderedBucketIds` is that bucket's full member order after the move, which sets each
   // account's position (the order shown in the balances grid).
   onPlaceAccount: (accountId: string, bucketId: string | null, orderedBucketIds?: string[]) => void;
+  // The Settings page's layout: each bucket ends with a field for adding an account to it, one
+  // field under the buckets adds a bucket, deletes ask first, and there is no Ungrouped row (an
+  // account only shows there if it somehow has no bucket, so nothing is ever hidden).
+  inline?: boolean;
 };
 
 const ACCOUNT_DRAG_TYPE = "application/x-janos-account";
@@ -133,6 +140,7 @@ function AccountsAndBuckets({
   onDeleteBucket,
   onReorderBuckets,
   onPlaceAccount,
+  inline = false,
 }: AccountsAndBucketsProps) {
   const [newAccount, setNewAccount] = useState("");
   const [newBucket, setNewBucket] = useState("");
@@ -459,7 +467,7 @@ function AccountsAndBuckets({
   return (
     <section className="category-manager">
       <div className="category-manager__heading">
-        <h2>Banks Accounts</h2>
+        <h2>Bank Accounts</h2>
         <p>
           Drag an account into a bucket to group it, or into “Ungrouped” to pull it back out.
           Drag a bucket by its handle to reorder, and recolor it with its swatch.
@@ -539,20 +547,32 @@ function AccountsAndBuckets({
                 ) : (
                   members.map((account) => renderPill(account, bucket.color, bucket.id))
                 )}
+                {inline && (
+                  <InlineAdd placeholder="+ Add account" onAdd={(name) => onAddAccount(name, bucket.id)} />
+                )}
               </div>
 
-              <button
-                type="button"
-                className="import-shell__upload-delete bucket-row__delete"
-                aria-label={`Delete bucket ${bucket.name}`}
-                onClick={() => onDeleteBucket(bucket.id)}
-              >
-                <TrashIcon />
-              </button>
+              {inline ? (
+                <ConfirmDeleteButton
+                  what={`bucket ${bucket.name}`}
+                  consequence="Its accounts become ungrouped."
+                  onConfirm={() => onDeleteBucket(bucket.id)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="import-shell__upload-delete bucket-row__delete"
+                  aria-label={`Delete bucket ${bucket.name}`}
+                  onClick={() => onDeleteBucket(bucket.id)}
+                >
+                  <TrashIcon />
+                </button>
+              )}
             </div>
           );
         })}
 
+        {(!inline || ungrouped.length > 0) && (
         <div
           className={`bucket-row bucket-row--ungrouped ${
             dragOverKey === UNGROUPED_BUCKET_ID ? "bucket-row--drop" : ""
@@ -575,8 +595,14 @@ function AccountsAndBuckets({
             )}
           </div>
         </div>
+        )}
       </div>
 
+      {inline ? (
+        <div className="bucket-board__forms">
+          <InlineAdd placeholder="+ Add bucket" onAdd={onAddBucket} />
+        </div>
+      ) : (
       <div className="bucket-board__forms">
         <form className="bucket-board__add" onSubmit={handleAddBucketSubmit}>
           <div className="bucket-board__field">
@@ -612,6 +638,7 @@ function AccountsAndBuckets({
           </div>
         </form>
       </div>
+      )}
     </section>
   );
 }

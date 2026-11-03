@@ -14,12 +14,14 @@ type CashFlowGroupsProps = {
   items: GroupableItem[];
   // The group each item shows under now (NO_GROUP_ID for Ungrouped).
   groupOfItem: Map<string, string>;
-  onAddGroup: (name: string) => void;
-  onRenameGroup: (id: string, name: string) => void;
   onSetGroupColor: (id: string, color: string) => void;
-  onDeleteGroup: (id: string) => void;
+  // The rest of the group editing is optional: a board that leaves one out doesn't offer it (the
+  // Settings board has two fixed groups, so it passes none of these).
+  onAddGroup?: (name: string) => void;
+  onRenameGroup?: (id: string, name: string) => void;
+  onDeleteGroup?: (id: string) => void;
   // Reorder all groups to the given id order (dragged by their handles).
-  onReorderGroups: (orderedIds: string[]) => void;
+  onReorderGroups?: (orderedIds: string[]) => void;
   // Move an item into a group, or null for Ungrouped.
   onPlaceItem: (itemKey: string, groupId: string | null) => void;
   // Heading copy, for boards (like Planning's) that reuse this one for something other than Cash Flow.
@@ -27,6 +29,9 @@ type CashFlowGroupsProps = {
   description?: ReactNode;
   // What the dragged pills are called in the board's column header.
   itemsLabel?: string;
+  // When the rows nest their own bucket rows (Settings), the single items header is split into a
+  // header per nested column, lined up with them: [bucket names, what's in each bucket].
+  nestedHeaders?: [string, string];
   // When given, each pill gets a delete button that calls this with the pill's key.
   onRemoveItem?: (itemKey: string) => void;
   // Extra content under the board, before the "New group" field (Planning's add-back field).
@@ -67,6 +72,7 @@ function CashFlowGroups({
   onPlaceItem,
   title = "Cash Flow Groups",
   itemsLabel = "Buckets",
+  nestedHeaders,
   onRemoveItem,
   footer,
   isNestedKey,
@@ -167,7 +173,7 @@ function CashFlowGroups({
   const handleRowDrop = (event: DragEvent<HTMLDivElement>, group: CashflowGroupRecord | null) => {
     event.preventDefault();
     if (draggingGroupId) {
-      onReorderGroups(groupDragPreview ?? baseOrder());
+      onReorderGroups?.(groupDragPreview ?? baseOrder());
       clearGroupDrag();
       return;
     }
@@ -229,7 +235,14 @@ function CashFlowGroups({
       <div className="bucket-board">
         <div className="bucket-board__header">
           <span className="bucket-board__header-label">Group</span>
-          <span className="bucket-board__header-label">{itemsLabel}</span>
+          {nestedHeaders ? (
+            <div className="bucket-board__header-nested">
+              <span className="bucket-board__header-label">{nestedHeaders[0]}</span>
+              <span className="bucket-board__header-label">{nestedHeaders[1]}</span>
+            </div>
+          ) : (
+            <span className="bucket-board__header-label">{itemsLabel}</span>
+          )}
         </div>
         {displayGroups().map((group) => {
           return (
@@ -243,50 +256,58 @@ function CashFlowGroups({
               onDrop={(event) => handleRowDrop(event, group)}
             >
               <div className="bucket-row__head">
-                <span
-                  className="bucket-row__grip"
-                  role="button"
-                  tabIndex={-1}
-                  draggable
-                  aria-label={`Reorder group ${group.name}`}
-                  title="Drag to reorder this group"
-                  onDragStart={(event) => handleGroupDragStart(event, group)}
-                  onDragEnd={clearGroupDrag}
-                >
-                  <GripIcon />
-                </span>
+                {onReorderGroups && (
+                  <span
+                    className="bucket-row__grip"
+                    role="button"
+                    tabIndex={-1}
+                    draggable
+                    aria-label={`Reorder group ${group.name}`}
+                    title="Drag to reorder this group"
+                    onDragStart={(event) => handleGroupDragStart(event, group)}
+                    onDragEnd={clearGroupDrag}
+                  >
+                    <GripIcon />
+                  </span>
+                )}
                 <ColorSwatchPicker
                   value={group.color}
                   label={`Color for group ${group.name}`}
                   onChange={(color) => onSetGroupColor(group.id, color)}
                 />
-                <textarea
-                  key={group.name}
-                  rows={1}
-                  className="bucket-row__name"
-                  defaultValue={group.name}
-                  aria-label={`Name for group ${group.name}`}
-                  onBlur={(event) => {
-                    const trimmed = event.target.value.trim();
-                    if (trimmed && trimmed !== group.name) {
-                      onRenameGroup(group.id, trimmed);
-                    } else {
-                      event.target.value = group.name;
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    // Enter saves (blur) instead of inserting a newline into the name.
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      event.currentTarget.blur();
-                    }
-                  }}
-                />
-                <ConfirmDeleteButton
-                  what={`group ${group.name}`}
-                  consequence="Its buckets move to Ungrouped."
-                  onConfirm={() => onDeleteGroup(group.id)}
-                />
+                {onRenameGroup ? (
+                  <textarea
+                    key={group.name}
+                    rows={1}
+                    className="bucket-row__name"
+                    defaultValue={group.name}
+                    aria-label={`Name for group ${group.name}`}
+                    onBlur={(event) => {
+                      const trimmed = event.target.value.trim();
+                      if (trimmed && trimmed !== group.name) {
+                        onRenameGroup(group.id, trimmed);
+                      } else {
+                        event.target.value = group.name;
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      // Enter saves (blur) instead of inserting a newline into the name.
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      }
+                    }}
+                  />
+                ) : (
+                  <span className="bucket-row__name bucket-row__name--fixed">{group.name}</span>
+                )}
+                {onDeleteGroup && (
+                  <ConfirmDeleteButton
+                    what={`group ${group.name}`}
+                    consequence="Its buckets move to Ungrouped."
+                    onConfirm={() => onDeleteGroup(group.id)}
+                  />
+                )}
               </div>
 
               <div className="bucket-row__items">
@@ -317,9 +338,11 @@ function CashFlowGroups({
 
       {footer}
 
-      <div className="bucket-board__forms">
-        <InlineAdd placeholder="+ Add group" onAdd={onAddGroup} />
-      </div>
+      {onAddGroup && (
+        <div className="bucket-board__forms">
+          <InlineAdd placeholder="+ Add group" onAdd={onAddGroup} />
+        </div>
+      )}
     </section>
   );
 }

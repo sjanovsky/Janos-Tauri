@@ -33,50 +33,12 @@ pub fn get_cashflow_data(state: State<DbState>) -> Result<CashflowData, String> 
     Ok(CashflowData { groups, members })
 }
 
+/// Recolor one of the two fixed groups.
 #[tauri::command]
-pub fn upsert_cashflow_group(
-    state: State<DbState>,
-    id: String,
-    name: String,
-    color: String,
-) -> Result<(), String> {
+pub fn set_cashflow_group_color(state: State<DbState>, id: String, color: String) -> Result<(), String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
-    conn.execute(
-        "INSERT INTO cashflow_groups (id, name, color, position)
-         VALUES (?1, ?2, ?3, COALESCE((SELECT MAX(position) + 1 FROM cashflow_groups), 0))
-         ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color",
-        params![id, name, color],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// Delete a group. What was in it goes to Ungrouped (explicitly, so it doesn't fall back to a
-/// default group).
-#[tauri::command]
-pub fn delete_cashflow_group(state: State<DbState>, id: String) -> Result<(), String> {
-    let mut conn = state.0.lock().map_err(|e| e.to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
-    tx.execute("UPDATE cashflow_members SET group_id = '' WHERE group_id = ?1", params![id])
+    conn.execute("UPDATE cashflow_groups SET color = ?2 WHERE id = ?1", params![id, color])
         .map_err(|e| e.to_string())?;
-    tx.execute("DELETE FROM cashflow_groups WHERE id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
-    tx.commit().map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn set_cashflow_group_positions(state: State<DbState>, ids: Vec<String>) -> Result<(), String> {
-    let mut conn = state.0.lock().map_err(|e| e.to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
-    for (position, id) in ids.iter().enumerate() {
-        tx.execute(
-            "UPDATE cashflow_groups SET position = ?2 WHERE id = ?1",
-            params![id, position as i64],
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
 

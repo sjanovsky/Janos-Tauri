@@ -231,9 +231,7 @@ export function buildCashFlow(input: CashFlowInput): CashFlowResult {
   // --- Roll the buckets (and Leftover) up into the user's groups ---
   const placements = placementMap(input.members);
   const groups = [...input.groups].sort(byPosition);
-  const groupIds = new Set(groups.map((group) => group.id));
-  const groupOf = (itemKey: string, name: string) =>
-    resolveGroupId({ key: itemKey, name }, placements, groupIds);
+  const groupOf = (itemKey: string) => resolveGroupId({ key: itemKey }, placements, groups);
 
   const children = new Map<string, CashFlowChild[]>();
   const addChild = (groupId: string, child: CashFlowChild) =>
@@ -243,12 +241,12 @@ export function buildCashFlow(input: CashFlowInput): CashFlowResult {
     if (!perColumn.some((value) => value !== 0)) {
       continue;
     }
-    const groupId = groupOf(leaf.itemKey, leaf.label);
+    const groupId = groupOf(leaf.itemKey);
     addChild(groupId, { id: leaf.id, label: leaf.label, color: leaf.color, perColumn });
   }
   // Leftover in a group is money out of that group: positive leftover adds to it, a shortfall
   // (negative leftover) takes away from it. Left out of every group it stays as Net income.
-  const leftoverGroup = groupOf(LEFTOVER_KEY, "Leftover");
+  const leftoverGroup = groupOf(LEFTOVER_KEY);
   const leftoverPlaced = leftoverGroup !== NO_GROUP_ID;
   if (leftoverPlaced && leftoverPerColumn.some((value) => value !== 0)) {
     addChild(leftoverGroup, {

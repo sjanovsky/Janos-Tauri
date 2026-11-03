@@ -1031,15 +1031,26 @@ body,
   cursor: default;
 }
 
-/* Summing row pinned above the rest: the divider sits beneath it instead. */
-.import-shell__totals-label--net-top,
-.import-shell__totals-row--net-top {
+/* Summing row pinned above the rest: the divider sits beneath it instead. The doubled selectors
+   keep this ahead of the plain Net row rules, which come later in the file and would otherwise
+   win for the value row (leaving it a top margin, padding and divider its label doesn't have). */
+.import-shell__totals-label--net.import-shell__totals-label--net-top,
+.import-shell__totals-row--net.import-shell__totals-row--net-top {
   margin-top: 0;
   margin-bottom: 0.3rem;
   padding-top: 0;
   padding-bottom: 0.2rem;
   border-top: 0;
   border-bottom: 1px solid var(--chart-gridline);
+}
+
+/* The Net row's label (left) and values (right) are separate boxes, so give both the same explicit
+   border-box height (one row plus its 0.2rem of padding and 1px divider). Left to size themselves,
+   the label came out shorter than the value row and every row under it drifted out of line. */
+.import-shell__totals-label--net,
+.import-shell__totals-row--net {
+  box-sizing: border-box;
+  height: calc(var(--totals-row-h) + 0.2rem + 1px);
 }
 
 .import-shell__totals-values {

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GroupableItem } from "../CashFlowGroups";
-import { INCOME_BUCKET_ID, nextBucketColor, type BucketRecord } from "../../spending/lib/categories";
+import { INCOME_BUCKET_ID, type BucketRecord } from "../../spending/lib/categories";
 import type { PaycheckBucketRecord } from "../../income/lib/income";
 import { LEFTOVER_COLOR } from "../../sankey/lib/sankey";
 import {
@@ -51,11 +51,9 @@ export function useCashflowGroups({
   );
   const groupOfItem = useMemo(() => {
     const placements = placementMap(members);
-    const groupIds = new Set(groups.map((group) => group.id));
-    return new Map(items.map((item) => [item.key, resolveGroupId(item, placements, groupIds)] as const));
+    return new Map(items.map((item) => [item.key, resolveGroupId(item, placements, groups)] as const));
   }, [items, members, groups]);
 
-  // --- Group settings ---
   // Each edit applies straight away and rolls back (with an error banner) if the write fails.
   const failSave = (rollback: () => void) => (error: unknown) => {
     console.error("Failed to save the cash flow groups", error);
@@ -63,60 +61,10 @@ export function useCashflowGroups({
     rollback();
   };
 
-  const handleAddGroup = (name: string) => {
+  const handleSetGroupColor = (id: string, color: string) => {
     const previous = groups;
-    const id = `cf-${crypto.randomUUID()}`;
-    const color = nextBucketColor(groups.length);
-    setGroups((current) => [...current, { id, name, color, position: current.length }]);
-    invoke("upsert_cashflow_group", { id, name, color }).catch(failSave(() => setGroups(previous)));
-  };
-
-  const handleUpdateGroup = (id: string, patch: Partial<Pick<CashflowGroupRecord, "name" | "color">>) => {
-    const current = groups.find((group) => group.id === id);
-    if (!current) {
-      return;
-    }
-    const previous = groups;
-    const next = { ...current, ...patch };
-    setGroups((all) => all.map((group) => (group.id === id ? next : group)));
-    invoke("upsert_cashflow_group", { id, name: next.name, color: next.color }).catch(
-      failSave(() => setGroups(previous)),
-    );
-  };
-
-  const handleDeleteGroup = (id: string) => {
-    const previousGroups = groups;
-    const previousMembers = members;
-    // What was in the group goes to Ungrouped on purpose, so it doesn't fall back to a default.
-    const orphaned = items.filter((item) => groupOfItem.get(item.key) === id).map((item) => item.key);
-    setGroups((all) => all.filter((group) => group.id !== id));
-    setMembers((all) => [
-      ...all.filter((member) => !orphaned.includes(member.itemKey)),
-      ...orphaned.map((itemKey) => ({ itemKey, groupId: "" })),
-    ]);
-    invoke("delete_cashflow_group", { id })
-      .then(() =>
-        Promise.all(orphaned.map((itemKey) => invoke("set_cashflow_member", { itemKey, groupId: "" }))),
-      )
-      .catch(
-        failSave(() => {
-          setGroups(previousGroups);
-          setMembers(previousMembers);
-        }),
-      );
-  };
-
-  const handleReorderGroups = (orderedIds: string[]) => {
-    const previous = groups;
-    setGroups((all) =>
-      orderedIds
-        .map((id, position) => {
-          const group = all.find((candidate) => candidate.id === id);
-          return group ? { ...group, position } : null;
-        })
-        .filter((group): group is CashflowGroupRecord => group !== null),
-    );
-    invoke("set_cashflow_group_positions", { ids: orderedIds }).catch(failSave(() => setGroups(previous)));
+    setGroups((all) => all.map((group) => (group.id === id ? { ...group, color } : group)));
+    invoke("set_cashflow_group_color", { id, color }).catch(failSave(() => setGroups(previous)));
   };
 
   const handlePlaceItem = (itemKey: string, groupId: string | null) => {
@@ -130,11 +78,7 @@ export function useCashflowGroups({
     groups,
     items,
     groupOfItem,
-    onAddGroup: handleAddGroup,
-    onRenameGroup: (id: string, name: string) => handleUpdateGroup(id, { name }),
-    onSetGroupColor: (id: string, color: string) => handleUpdateGroup(id, { color }),
-    onDeleteGroup: handleDeleteGroup,
-    onReorderGroups: handleReorderGroups,
+    onSetGroupColor: handleSetGroupColor,
     onPlaceItem: handlePlaceItem,
   };
 }

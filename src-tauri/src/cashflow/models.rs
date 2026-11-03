@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// A top-level Cash Flow group (Taxes, Savings, Spending, ...) that buckets are dragged into.
+/// A top-level Cash Flow group (Paycheck or Spending) that buckets roll up into.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CashflowGroup {

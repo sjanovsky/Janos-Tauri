@@ -8,7 +8,10 @@ import {
   withheldSegmentId,
   type CashFlowInput,
 } from "./cashflow";
-import { LEFTOVER_KEY, SAVINGS_GROUP_ID, SPENDING_GROUP_ID, TAXES_GROUP_ID, spendingItemKey } from "./groups";
+import { LEFTOVER_KEY, spendingItemKey } from "./groups";
+
+const PAYCHECK_GROUP_ID = "cf-paycheck";
+const SPENDING_GROUP_ID = "cf-spending";
 import type { ImportedTransaction } from "../../upload/lib/csvParser";
 
 const tx = (id: string, date: string, amount: number, sourceBank: string, category: string): ImportedTransaction => ({
@@ -69,9 +72,8 @@ const input = (transactions: ImportedTransaction[]): CashFlowInput => ({
     { name: "Checking", spendingPositive: false },
   ],
   groups: [
-    { id: TAXES_GROUP_ID, name: "Taxes", color: "#a00", position: 0 },
-    { id: SAVINGS_GROUP_ID, name: "Savings", color: "#0a0", position: 1 },
-    { id: SPENDING_GROUP_ID, name: "Spending", color: "#aa0", position: 2 },
+    { id: PAYCHECK_GROUP_ID, name: "Paycheck", color: "#a00", position: 0 },
+    { id: SPENDING_GROUP_ID, name: "Spending", color: "#aa0", position: 1 },
   ],
   members: [],
 });
@@ -95,9 +97,8 @@ describe("buildCashFlow", () => {
     expect(jan.label).toBe("01/2026");
     expect(jan.segments.map((s) => [s.id, s.value])).toEqual([
       [GROSS_SEGMENT_ID, 3000],
-      // Withholding starts in Taxes, Retirement (by name) in Savings, spending buckets in Spending.
-      [groupSegmentId(TAXES_GROUP_ID), -500],
-      [groupSegmentId(SAVINGS_GROUP_ID), -300],
+      // Paycheck buckets (Withholding, Retirement) start in Paycheck, spending buckets in Spending.
+      [groupSegmentId(PAYCHECK_GROUP_ID), -800],
       // 100 − 20 on the card, and an 80 debit from a spending-negative bank.
       [groupSegmentId(SPENDING_GROUP_ID), -160],
     ]);
@@ -111,14 +112,13 @@ describe("buildCashFlow", () => {
   it("lists gross, then each group with its buckets underneath", () => {
     expect(result.rows.map((row) => [row.label, row.perColumn, row.children.map((c) => c.label)])).toEqual([
       ["Gross income", [3000, 0], []],
-      ["Taxes", [-500, 0], ["Withholding"]],
-      ["Savings", [-300, 0], ["Retirement"]],
+      ["Paycheck", [-800, 0], ["Withholding", "Retirement"]],
       ["Spending", [-160, -40], ["Food", "Unclassified"]],
     ]);
   });
 
   it("records which transactions feed each group and bucket", () => {
-    expect([...(result.transactionIds.get(groupSegmentId(SAVINGS_GROUP_ID)) ?? [])]).toEqual(["d1"]);
+    expect([...(result.transactionIds.get(groupSegmentId(PAYCHECK_GROUP_ID)) ?? [])]).toEqual(["d1"]);
     expect([...(result.transactionIds.get(withheldSegmentId("ret")) ?? [])]).toEqual(["d1"]);
     expect([...(result.transactionIds.get(groupSegmentId(SPENDING_GROUP_ID)) ?? [])].sort()).toEqual([
       "c1",
@@ -131,30 +131,31 @@ describe("buildCashFlow", () => {
 });
 
 describe("buildCashFlow groups", () => {
-  it("honors where the user dragged a bucket, and Ungrouped for a deleted group", () => {
+  it("honors a saved placement, and Ungrouped for a group that doesn't exist", () => {
     const base = input(transactions);
     const moved = buildCashFlow({
       ...base,
-      members: [{ itemKey: spendingItemKey("food"), groupId: SAVINGS_GROUP_ID }],
+      members: [{ itemKey: spendingItemKey("food"), groupId: PAYCHECK_GROUP_ID }],
     });
-    expect(moved.rows.find((row) => row.label === "Savings")?.children.map((c) => c.label)).toEqual([
+    expect(moved.rows.find((row) => row.label === "Paycheck")?.children.map((c) => c.label)).toEqual([
+      "Withholding",
       "Retirement",
       "Food",
     ]);
 
     const noSpending = buildCashFlow({ ...base, groups: base.groups.filter((g) => g.id !== SPENDING_GROUP_ID) });
-    expect(noSpending.rows.map((row) => row.label)).toEqual(["Gross income", "Taxes", "Savings", "Ungrouped"]);
+    expect(noSpending.rows.map((row) => row.label)).toEqual(["Gross income", "Paycheck", "Ungrouped"]);
   });
 
   it("puts Leftover in a group as money out, so the bar balances", () => {
     const result = buildCashFlow({
       ...input(transactions),
-      members: [{ itemKey: LEFTOVER_KEY, groupId: SAVINGS_GROUP_ID }],
+      members: [{ itemKey: LEFTOVER_KEY, groupId: PAYCHECK_GROUP_ID }],
     });
-    const savings = result.rows.find((row) => row.label === "Savings")!;
+    const paycheck = result.rows.find((row) => row.label === "Paycheck")!;
     // January has 2040 left over, February is 40 short.
-    expect(savings.children.find((c) => c.id === LEFTOVER_SEGMENT_ID)?.perColumn).toEqual([-2040, 40]);
-    expect(savings.perColumn).toEqual([-2340, 40]);
+    expect(paycheck.children.find((c) => c.id === LEFTOVER_SEGMENT_ID)?.perColumn).toEqual([-2040, 40]);
+    expect(paycheck.perColumn).toEqual([-2840, 40]);
     expect(result.netPerColumn).toEqual([0, 0]);
   });
 

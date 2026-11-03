@@ -100,13 +100,18 @@ export function useNetWorthAccounts({
 
   // --- Accounts ---
 
-  const handleAddAccount = (name: string) => {
+  // Adds an account, Ungrouped or straight into `bucketId`.
+  const handleAddAccount = (name: string, bucketId: string | null = null) => {
     const previous = accounts;
     const id = crypto.randomUUID();
     const position = accounts.reduce((max, account) => Math.max(max, account.position), -1) + 1;
-    setAccounts((current) => [...current, { id, name, bucketId: null, position }]);
+    setAccounts((current) => [...current, { id, name, bucketId, position }]);
 
-    invoke("upsert_networth_account", { id, name }).catch((error) => {
+    const saved = invoke("upsert_networth_account", { id, name });
+    const placed = bucketId
+      ? saved.then(() => invoke("set_networth_account_placement", { id, name, bucketId }))
+      : saved;
+    placed.catch((error) => {
       console.error("Failed to save the new account", error);
       onError();
       setAccounts(previous);

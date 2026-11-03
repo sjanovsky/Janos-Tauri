@@ -5,11 +5,7 @@ import type { UploadedFileView } from "../../upload/lib/uploads";
 import type { PaychecksData } from "../../income/lib/income";
 import type { TaxesData } from "../../taxes/lib/taxes";
 import {
-  SAVINGS_GROUP_ID,
-  TAXES_GROUP_ID,
-  paycheckItemKey,
-  placementMap,
-  resolveGroupId,
+  SAVINGS_NAME,
   type CashflowData,
 } from "../../cashflow/lib/groups";
 import {
@@ -122,32 +118,20 @@ export function usePlanning() {
     });
   };
 
-  // The paycheck buckets Cash Flow puts in a group; they are where the default sections start.
-  const bucketsInGroup = useMemo(() => {
-    const placements = placementMap(cashflow.members);
-    const groupIds = new Set(cashflow.groups.map((group) => group.id));
-    return (groupId: string) =>
-      paychecks.buckets
-        .filter(
-          (bucket) =>
-            resolveGroupId({ key: paycheckItemKey(bucket.id), name: bucket.name }, placements, groupIds) === groupId,
-        )
-        .map((bucket) => bucket.id);
-  }, [cashflow, paychecks.buckets]);
-
-  // The saved sections, or Taxes and Retirement built from Cash Flow until the user saves a layout.
+  // Where the default sections start: Retirement from the paycheck buckets that set money aside
+  // (401k, HSA, ... by name), Taxes from the rest.
   const sections = useMemo<PlanningSection[]>(() => {
-    const groupColor = (groupId: string, fallback: string) =>
-      cashflow.groups.find((group) => group.id === groupId)?.color ?? fallback;
     const saved = parseSections(settings.get(SECTIONS_KEY));
+    const savingsBucketIds = paychecks.buckets.filter((bucket) => SAVINGS_NAME.test(bucket.name)).map((b) => b.id);
+    const taxBucketIds = paychecks.buckets.filter((bucket) => !SAVINGS_NAME.test(bucket.name)).map((b) => b.id);
     return (
       (saved && expandBucketSources(saved, paychecks.items)) ??
-      defaultSections(paychecks.items, bucketsInGroup(TAXES_GROUP_ID), bucketsInGroup(SAVINGS_GROUP_ID), {
-        taxes: groupColor(TAXES_GROUP_ID, "#6a9fc9"),
-        retirement: groupColor(SAVINGS_GROUP_ID, "#4f8a68"),
+      defaultSections(paychecks.items, taxBucketIds, savingsBucketIds, {
+        taxes: "#6a9fc9",
+        retirement: "#4f8a68",
       })
     );
-  }, [settings, cashflow.groups, paychecks.items, bucketsInGroup]);
+  }, [settings, paychecks.items, paychecks.buckets]);
 
   const hiddenItems = useMemo(() => parseHiddenItems(settings.get(HIDDEN_ITEMS_KEY)), [settings]);
   const saveHiddenItems = (ids: string[]) => setSetting(HIDDEN_ITEMS_KEY, ids.length > 0 ? JSON.stringify(ids) : null);

@@ -26,3 +26,7 @@
 .settings-zone { display: flex; flex-wrap: wrap; gap: 0.4rem; flex: 1 1 auto; min-width: 3rem; min-height: 2rem; align-items: center; border-radius: 8px; }
 .settings-zone--drop { background: #eef2ff; box-shadow: inset 0 0 0 2px rgba(79, 70, 229, 0.35); }
 .bucket-board__forms .inline-add__input { width: 12rem; border-radius: 8px; }
+.bucket-row__name--fixed:hover { border-color: transparent; }
+/* The split header over the nested rows: same columns (and padding) as a nested bucket row, so
+   "Buckets" sits over the bucket names and "Categories" over the pills. */
+.bucket-board__header-nested { display: grid; grid-template-columns: var(--bucket-name-col) 1fr 28px; gap: 0.75rem; padding: 0 calc(0.9rem + 1px); }

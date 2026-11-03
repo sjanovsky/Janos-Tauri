@@ -1,18 +1,18 @@
-// The Cash Flow page's top level: groups (Taxes, Savings, Spending by default, and whatever else
-// the user adds) that paycheck buckets, spending buckets and the Leftover line are dragged into.
+// The Cash Flow page's top level: groups (Paycheck and Spending) that paycheck buckets and
+// spending buckets roll up into, and that the Leftover line can be dragged into.
 // Pure helpers, no React.
 
 export type CashflowGroupRecord = { id: string; name: string; color: string; position: number };
+
+// The two fixed groups (seeded by the backend): paycheck buckets roll up into the first, spending
+// buckets into the second. The user can recolor them but not rename, delete or add to them.
+export const PAYCHECK_GROUP_ID = "cf-paycheck";
+export const SPENDING_GROUP_ID = "cf-spending";
 
 // Where a bucket was put. An empty groupId means "Ungrouped" on purpose.
 export type CashflowMemberRecord = { itemKey: string; groupId: string };
 
 export type CashflowData = { groups: CashflowGroupRecord[]; members: CashflowMemberRecord[] };
-
-// Seeded by the backend; buckets with no saved placement start in these.
-export const TAXES_GROUP_ID = "cf-taxes";
-export const SAVINGS_GROUP_ID = "cf-savings";
-export const SPENDING_GROUP_ID = "cf-spending";
 
 // Stands in for "no group" in the chart and table; never stored.
 export const NO_GROUP_ID = "cf-none";
@@ -25,32 +25,30 @@ export const LEFTOVER_KEY = "leftover";
 export const paycheckItemKey = (bucketId: string) => `paycheck:${bucketId}`;
 export const spendingItemKey = (bucketId: string) => `spending:${bucketId}`;
 
-// Paycheck buckets that set money aside, by name; every other paycheck bucket starts in Taxes.
-const SAVINGS_NAME = /retire|401|403|\bira\b|\bhsa\b|saving|invest|pension/i;
+// Paycheck buckets that set money aside, by name (401k, HSA, ...). Planning starts its Retirement
+// section from these and its Taxes section from the rest.
+export const SAVINGS_NAME = /retire|401|403|\bira\b|\bhsa\b|saving|invest|pension/i;
 
-/** The group an item starts in until the user drags it somewhere, or null for Ungrouped. */
-export function defaultGroupId(itemKey: string, name: string): string | null {
+/** The group an item sits in until it's placed elsewhere: its kind's group, or null for Leftover. */
+export function defaultGroupId(itemKey: string): string | null {
   if (itemKey === LEFTOVER_KEY) {
     return null;
   }
-  if (itemKey.startsWith("paycheck:")) {
-    return SAVINGS_NAME.test(name) ? SAVINGS_GROUP_ID : TAXES_GROUP_ID;
-  }
-  return SPENDING_GROUP_ID;
+  return itemKey.startsWith("paycheck:") ? PAYCHECK_GROUP_ID : SPENDING_GROUP_ID;
 }
 
 /**
- * The group an item shows under: where the user put it, else its default, else Ungrouped (also
- * when that group has since been deleted).
+ * The group an item shows under: where it was put, else its default, else Ungrouped (also when that
+ * group doesn't exist).
  */
 export function resolveGroupId(
-  item: { key: string; name: string },
+  item: { key: string },
   placements: Map<string, string>,
-  groupIds: Set<string>,
+  groups: CashflowGroupRecord[],
 ): string {
   const stored = placements.get(item.key);
-  const wanted = stored !== undefined ? stored : defaultGroupId(item.key, item.name);
-  return wanted && groupIds.has(wanted) ? wanted : NO_GROUP_ID;
+  const wanted = stored !== undefined ? stored : defaultGroupId(item.key);
+  return wanted && groups.some((group) => group.id === wanted) ? wanted : NO_GROUP_ID;
 }
 
 export const placementMap = (members: CashflowMemberRecord[]) =>
